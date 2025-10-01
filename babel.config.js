@@ -18,10 +18,14 @@ module.exports = function(api) {
     env: {
       production: {
         plugins: [
-          // Remove console logs in production
+          // Remove console logs in production for security
           ['transform-remove-console', { 
             exclude: ['error', 'warn'] 
           }],
+          // Additional security transformations
+          'transform-react-remove-prop-types',
+          // Dead code elimination
+          'transform-remove-undefined',
         ],
       },
     },
