@@ -33,52 +33,146 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '11'
+          
+      - name: 🚑 Alternative Java Setup (Emergency Fallback)
+        if: failure()
+        run: |
+          echo "Setting up Java manually as last resort..."
+          
+          # Install OpenJDK via apt
+          sudo apt-get update
+          sudo apt-get install -y openjdk-17-jdk
+          
+          # Find the installation
+          MANUAL_JAVA_HOME=$(find /usr/lib/jvm -name "java-17-openjdk*" | head -1)
+          if [ -n "$MANUAL_JAVA_HOME" ] && [ -f "$MANUAL_JAVA_HOME/bin/java" ]; then
+            echo "JAVA_HOME=$MANUAL_JAVA_HOME" >> $GITHUB_ENV
+            export JAVA_HOME="$MANUAL_JAVA_HOME"
+            echo "✅ Manually installed Java at: $MANUAL_JAVA_HOME"
+            "$MANUAL_JAVA_HOME/bin/java" -version
+          else
+            echo "❌ Manual Java installation failed"
+          fi
+          
+      - name: 🔍 Debug Java Installation
+        run: |
+          echo "=== Java Installation Debug ==="
+          echo "JAVA_HOME from environment: $JAVA_HOME"
+          echo "PATH: $PATH"
+          
+          echo "\n=== Java Installation Directory Structure ==="
+          if [ -d "$JAVA_HOME" ]; then
+            echo "JAVA_HOME directory exists: $JAVA_HOME"
+            echo "Contents of JAVA_HOME:"
+            ls -la "$JAVA_HOME" || echo "Cannot list JAVA_HOME contents"
+            
+            echo "\nLooking for bin directory:"
+            find "$JAVA_HOME" -name "bin" -type d 2>/dev/null || echo "No bin directory found"
+            
+            echo "\nLooking for java binary:"
+            find "$JAVA_HOME" -name "java" -type f 2>/dev/null || echo "No java binary found"
+          else
+            echo "JAVA_HOME directory does not exist: $JAVA_HOME"
+          fi
+          
+          echo "\n=== System Java ==="
+          which java || echo "No system java found"
+          java -version 2>&1 || echo "Cannot run java -version"
+          
+          echo "\n=== Available Java Installations ==="
+          find /opt/hostedtoolcache -name "java" -type f 2>/dev/null | head -10 || echo "No Java installations found in hostedtoolcache"
+          
+          echo "\n=== JVM Directory Listing ==="
+          ls -la /usr/lib/jvm/ 2>/dev/null || echo "No JVM directory found"
 
       - name: 🔧 Manual Java Setup (if needed)
         run: |
-          # Find and set JAVA_HOME manually if the action failed
-          if [ ! -d "$JAVA_HOME" ] || [ ! -f "$JAVA_HOME/bin/java" ]; then
-            echo "Current JAVA_HOME is invalid: $JAVA_HOME"
-            echo "Searching for Java installations..."
+          echo "Initial JAVA_HOME: $JAVA_HOME"
+          
+          # Function to find working Java installation
+          find_working_java() {
+            local java_paths=(
+              "$JAVA_HOME"
+              "/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17*/x64"
+              "/opt/hostedtoolcache/Java_Adopt_jdk/17*/x64"
+              "/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/11*/x64"
+              "/opt/hostedtoolcache/Java_Adopt_jdk/11*/x64"
+              "/usr/lib/jvm/java-*-openjdk*"
+              "/usr/lib/jvm/temurin-*"
+            )
             
-            # Search for Java 17 first (required for Android SDK)
-            for java_path in \
-              /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17*/x64 \
-              /opt/hostedtoolcache/Java_Adopt_jdk/17*/x64 \
-              /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/11*/x64 \
-              /opt/hostedtoolcache/Java_Adopt_jdk/11*/x64 \
-              /usr/lib/jvm/java-*-openjdk* \
-              /usr/lib/jvm/temurin-*; do
-              
-              if [ -f "$java_path/bin/java" ]; then
-                export JAVA_HOME="$java_path"
-                echo "JAVA_HOME=$java_path" >> $GITHUB_ENV
-                echo "Found and set JAVA_HOME to: $java_path"
-                "$java_path/bin/java" -version
-                break
-              fi
+            for path_pattern in "${java_paths[@]}"; do
+              for java_path in $path_pattern; do
+                if [ -d "$java_path" ]; then
+                  echo "Checking: $java_path"
+                  
+                  # Check for java binary in bin directory
+                  if [ -f "$java_path/bin/java" ]; then
+                    echo "✅ Found working Java at: $java_path"
+                    echo "JAVA_HOME=$java_path" >> $GITHUB_ENV
+                    export JAVA_HOME="$java_path"
+                    "$java_path/bin/java" -version
+                    return 0
+                  fi
+                  
+                  # Sometimes Java is nested deeper - check subdirectories
+                  for subdir in "$java_path"/*; do
+                    if [ -f "$subdir/bin/java" ]; then
+                      echo "✅ Found working Java in subdirectory: $subdir"
+                      echo "JAVA_HOME=$subdir" >> $GITHUB_ENV
+                      export JAVA_HOME="$subdir"
+                      "$subdir/bin/java" -version
+                      return 0
+                    fi
+                  done
+                fi
+              done
             done
             
             # Last resort: use system java
-            if [ ! -d "$JAVA_HOME" ]; then
-              SYSTEM_JAVA=$(which java)
-              if [ -n "$SYSTEM_JAVA" ]; then
-                JAVA_HOME=$(dirname $(dirname $SYSTEM_JAVA))
-                echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
-                echo "Using system Java: $JAVA_HOME"
+            local system_java=$(which java 2>/dev/null)
+            if [ -n "$system_java" ]; then
+              local system_java_home=$(dirname $(dirname "$system_java"))
+              if [ -f "$system_java_home/bin/java" ]; then
+                echo "✅ Using system Java: $system_java_home"
+                echo "JAVA_HOME=$system_java_home" >> $GITHUB_ENV
+                export JAVA_HOME="$system_java_home"
+                "$system_java_home/bin/java" -version
+                return 0
               fi
             fi
+            
+            echo "❌ No working Java installation found"
+            return 1
+          }
+          
+          # Check if current JAVA_HOME is valid
+          if [ ! -f "$JAVA_HOME/bin/java" ]; then
+            echo "⚠️ Current JAVA_HOME is invalid: $JAVA_HOME"
+            echo "Directory contents:"
+            ls -la "$JAVA_HOME" 2>/dev/null || echo "Directory does not exist"
+            
+            echo "Searching for valid Java installation..."
+            if ! find_working_java; then
+              echo "❌ Failed to find any working Java installation"
+              exit 1
+            fi
+          else
+            echo "✅ JAVA_HOME is valid: $JAVA_HOME"
           fi
           
           echo "Final JAVA_HOME: $JAVA_HOME"
-          # Check Java version for Android SDK compatibility
-          JAVA_VERSION=$($JAVA_HOME/bin/java -version 2>&1 | head -n 1 | cut -d'"' -f2)
-          echo "Java version: $JAVA_VERSION"
           
-          # Set skip flag if Java version is less than 17
-          if [[ "$JAVA_VERSION" < "17" ]]; then
-            echo "SKIP_JDK_VERSION_CHECK=true" >> $GITHUB_ENV
-            echo "Java version is less than 17, setting SKIP_JDK_VERSION_CHECK=true"
+          # Check Java version for Android SDK compatibility
+          if [ -f "$JAVA_HOME/bin/java" ]; then
+            JAVA_VERSION=$($JAVA_HOME/bin/java -version 2>&1 | head -n 1 | cut -d'"' -f2)
+            echo "Java version: $JAVA_VERSION"
+            
+            # Set skip flag if Java version is less than 17
+            if [[ "$JAVA_VERSION" < "17" ]]; then
+              echo "SKIP_JDK_VERSION_CHECK=true" >> $GITHUB_ENV
+              echo "Java version is less than 17, setting SKIP_JDK_VERSION_CHECK=true"
+            fi
           fi
 
       - name: 🏗 Setup Android SDK
@@ -172,17 +266,32 @@ jobs:
         run: |
           echo "Building with JAVA_HOME: $JAVA_HOME"
           
-          # Verify Java is accessible
+          # Final verification that Java is accessible
           if [ -f "$JAVA_HOME/bin/java" ]; then
+            echo "✅ Java binary found at: $JAVA_HOME/bin/java"
             "$JAVA_HOME/bin/java" -version
           else
-            echo "Warning: JAVA_HOME/bin/java not found, using system java"
+            echo "❌ JAVA_HOME/bin/java not found at: $JAVA_HOME/bin/java"
+            echo "Available files in JAVA_HOME:"
+            ls -la "$JAVA_HOME" 2>/dev/null || echo "JAVA_HOME directory not accessible"
+            
+            # Try to find java in the current JAVA_HOME structure
+            echo "Searching for java binary in JAVA_HOME..."
+            find "$JAVA_HOME" -name "java" -type f 2>/dev/null | head -5
+            
+            # Use system java as fallback
+            echo "Using system java as fallback"
             java -version
           fi
           
+          echo "Gradle build starting..."
           chmod +x ./gradlew
+          
+          # Use explicit JAVA_HOME in Gradle execution
+          export JAVA_HOME="$JAVA_HOME"
           ./gradlew assembleRelease --no-daemon --stacktrace \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" \
+            -Dorg.gradle.java.home="$JAVA_HOME"
 
       - name: 📦 Upload APK Artifact
         uses: actions/upload-artifact@v4
