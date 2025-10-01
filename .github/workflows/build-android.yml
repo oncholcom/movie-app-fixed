@@ -30,6 +30,30 @@ jobs:
       - name: 🏗 Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: 📦 Cache Gradle wrapper
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/wrapper/
+          key: gradle-wrapper-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-wrapper-
+
+      - name: 📦 Cache Gradle dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/caches/
+          key: gradle-cache-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-cache-
+
+      - name: 📦 Cache node modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: npm-cache-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            npm-cache-
+
       - name: 📦 Install dependencies
         run: npm ci
 
@@ -60,11 +84,21 @@ jobs:
       - name: 🏗 Prebuild Android
         run: npx expo prebuild --platform android --clean
 
+      - name: 🧠 Free up disk space
+        run: |
+          # Clean up to free memory and disk space
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
+
       - name: 🔨 Build Android APK
         run: |
           cd android
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon
+          # Build with increased memory settings and optimizations
+          ./gradlew assembleRelease --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
 
       - name: 📦 Upload APK
         uses: actions/upload-artifact@v4
