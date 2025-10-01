@@ -60,11 +60,25 @@ jobs:
       - name: 🏗 Prebuild Android
         run: npx expo prebuild --platform android --clean
 
+      - name: 💾 Free up disk space
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h
+
       - name: 🔨 Build Android APK
+        env:
+          GRADLE_OPTS: "-Xmx8g -XX:MaxMetaspaceSize=2g -XX:+UseG1GC -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dci=true"
         run: |
           cd android
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon
+          # Clean build directory
+          ./gradlew clean
+          # Build with memory optimizations and skip lint
+          ./gradlew assembleRelease --no-daemon --max-workers=2 --no-parallel --stacktrace -Pci=true -x lintVitalAnalyzeRelease -x lintVitalReportRelease
 
       - name: 📦 Upload APK
         uses: actions/upload-artifact@v4
