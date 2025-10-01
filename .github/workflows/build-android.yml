@@ -26,53 +26,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          
-      - name: 🔧 Configure Java Environment
-        run: |
-          # Get the Java home from the setup-java action
-          echo "Initial JAVA_HOME: $JAVA_HOME"
-          
-          # Verify and fix Java installation
-          if [ -d "$JAVA_HOME" ] && [ -f "$JAVA_HOME/bin/java" ]; then
-            echo "Java installation found at: $JAVA_HOME"
-          else
-            echo "Java installation issue detected. Searching for alternatives..."
-            
-            # Try multiple search strategies
-            for search_path in \
-              "/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17*/x64" \
-              "/usr/lib/jvm/temurin-17-jdk-amd64" \
-              "/usr/lib/jvm/java-17-openjdk-amd64" \
-              $(find /opt/hostedtoolcache -name "*17*" -type d 2>/dev/null | grep -i java | head -3) \
-              $(find /usr/lib/jvm -name "*17*" -type d 2>/dev/null | head -3); do
-              
-              # Expand glob patterns
-              for possible_java in $search_path; do
-                if [ -d "$possible_java" ] && [ -f "$possible_java/bin/java" ]; then
-                  export JAVA_HOME="$possible_java"
-                  echo "Found working Java installation at: $JAVA_HOME"
-                  break 2
-                fi
-              done
-            done
-          fi
-          
-          # Final verification
-          if [ ! -f "$JAVA_HOME/bin/java" ]; then
-            echo "ERROR: Could not find a valid Java installation"
-            echo "Available Java installations:"
-            find /opt/hostedtoolcache /usr/lib/jvm -name "java" -type f 2>/dev/null | head -10 || true
-            exit 1
-          fi
-          
-          # Set environment variables for subsequent steps
-          echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
-          echo "$JAVA_HOME/bin" >> $GITHUB_PATH
-          
-          # Verify installation
-          echo "Final JAVA_HOME: $JAVA_HOME"
-          "$JAVA_HOME/bin/java" -version
-          "$JAVA_HOME/bin/javac" -version
 
       - name: 🏗 Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -107,48 +60,11 @@ jobs:
       - name: 🏗 Prebuild Android
         run: npx expo prebuild --platform android --clean
 
-      - name: 💾 Free up disk space
-        run: |
-          df -h
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          df -h
-
       - name: 🔨 Build Android APK
-        env:
-          GRADLE_OPTS: "-Xmx8g -XX:MaxMetaspaceSize=2g -XX:+UseG1GC -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dci=true"
         run: |
-          # Final Java environment verification
-          echo "Current JAVA_HOME: $JAVA_HOME"
-          echo "PATH: $PATH"
-          echo "Java version check:"
-          java -version
-          
-          # Ensure JAVA_HOME is available for Gradle
-          if [ ! -f "$JAVA_HOME/bin/java" ]; then
-            echo "ERROR: Java binary not found at expected location"
-            echo "Searching for Java binary..."
-            which java
-            JAVA_BIN_PATH=$(which java)
-            if [ -n "$JAVA_BIN_PATH" ]; then
-              export JAVA_HOME=$(dirname $(dirname $JAVA_BIN_PATH))
-              echo "Updated JAVA_HOME to: $JAVA_HOME"
-            fi
-          fi
-          
           cd android
           chmod +x ./gradlew
-          
-          # Verify Gradle can find Java
-          echo "Testing Gradle Java detection..."
-          ./gradlew --version
-          
-          # Clean build directory
-          ./gradlew clean
-          # Build with memory optimizations and skip lint
-          ./gradlew assembleRelease --no-daemon --max-workers=2 --no-parallel --stacktrace -Pci=true -x lintVitalAnalyzeRelease -x lintVitalReportRelease
+          ./gradlew assembleRelease --no-daemon
 
       - name: 📦 Upload APK
         uses: actions/upload-artifact@v4
