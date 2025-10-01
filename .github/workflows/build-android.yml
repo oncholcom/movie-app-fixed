@@ -33,6 +33,27 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci
 
+      - name: 🔐 Create .env from GitHub Secrets
+        env:
+          MOBILE_API_BASE_URL: ${{ secrets.MOBILE_API_BASE_URL }}
+          MOBILE_API_KEY: ${{ secrets.MOBILE_API_KEY }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+        run: |
+          # Create .env only if not present in repo
+          if [ ! -f .env ]; then
+            if [ -z "$MOBILE_API_BASE_URL" ] || [ -z "$MOBILE_API_KEY" ]; then
+              echo "Missing required secrets: MOBILE_API_BASE_URL and/or MOBILE_API_KEY" >&2
+              exit 1
+            fi
+            cat > .env <<EOF
+MOBILE_API_BASE_URL=$MOBILE_API_BASE_URL
+MOBILE_API_KEY=$MOBILE_API_KEY
+ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+EOF
+          fi
+          # Copy to android as a safety net for path resolution during bundling
+          cp .env android/.env
+
       - name: 🔧 Install Expo CLI
         run: npm install -g @expo/ngrok@^4.1.0 expo-cli eas-cli
 
@@ -48,14 +69,26 @@ jobs:
       - name: 📦 Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
+          name: RObiStream-release
           path: android/app/build/outputs/apk/release/app-release.apk
 
       - name: 🎉 Create Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
+          tag_name: v${{ github.run_number }}
+          name: Release v${{ github.run_number }}
+          body: |
+            ## What's New
+            - Bug fixes and improvements
+            - Performance enhancements
+            
+            ## Installation
+            Download the APK below and install on your Android device.
+            
+            **Note:** You may need to enable "Install from unknown sources" in your device settings.
           files: android/app/build/outputs/apk/release/app-release.apk
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

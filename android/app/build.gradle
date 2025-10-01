@@ -85,9 +85,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.anonymous.movieappfixed'
+    namespace 'com.robistream.app'
     defaultConfig {
-        applicationId 'com.anonymous.movieappfixed'
+        applicationId 'com.robistream.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

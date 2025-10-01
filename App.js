@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from 'react'
 import { SecurityChecker } from './src/utils/securityCheck'
+import UpdateService from './src/services/UpdateService'
 import { NavigationContainer } from '@react-navigation/native'
 import { createStackNavigator } from '@react-navigation/stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
@@ -101,6 +102,16 @@ function RootNavigator() {
 }
 
 export default function App() {
+  useEffect(() => {
+    // Start checking for updates
+    UpdateService.startAutoUpdateCheck();
+
+    return () => {
+      // Cleanup on unmount
+      UpdateService.stopAutoUpdateCheck();
+    };
+  }, []);
+
   useEffect(() => {
     // Check security on app start
     const checkSecurity = async () => {

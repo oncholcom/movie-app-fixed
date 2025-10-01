@@ -41,6 +41,14 @@ const resolvedApiKey =
     process.env.MOBILE_API_KEY,
   )
 
+// Warn at runtime if base URL or API key are missing; helps diagnose release builds
+if (!resolvedBaseUrl) {
+  console.warn('[MobileAPIConfig] MOBILE_API_BASE_URL is not defined. Login requests will fail. Ensure .env is bundled.');
+}
+if (!resolvedApiKey) {
+  console.warn('[MobileAPIConfig] MOBILE_API_KEY is not defined. API requests may be rejected.');
+}
+
 const resolvedProdWebLoginUrl =
   resolveEnvValue(
     ENV_MOBILE_WEB_LOGIN_URL,
