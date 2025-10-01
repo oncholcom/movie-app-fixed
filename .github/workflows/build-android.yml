@@ -21,17 +21,54 @@ jobs:
           node-version: 18
           cache: 'npm'
 
-      - name: 🏗 Setup Java 17
+      - name: 🏗 Setup Java 11 (Primary)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
+          java-version: '11'
+          
+      - name: 🔄 Setup Java 17 (Fallback)
+        if: failure()
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
           java-version: '17'
 
-      - name: 🔍 Verify Java Installation
+      - name: 🔧 Manual Java Setup (if needed)
         run: |
-          echo "JAVA_HOME: $JAVA_HOME"
-          java -version
-          which java
+          # Find and set JAVA_HOME manually if the action failed
+          if [ ! -d "$JAVA_HOME" ] || [ ! -f "$JAVA_HOME/bin/java" ]; then
+            echo "Current JAVA_HOME is invalid: $JAVA_HOME"
+            echo "Searching for Java installations..."
+            
+            # Search for Java installations
+            for java_path in \
+              /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/*/x64 \
+              /opt/hostedtoolcache/Java_Adopt_jdk/*/x64 \
+              /usr/lib/jvm/java-*-openjdk* \
+              /usr/lib/jvm/temurin-*; do
+              
+              if [ -f "$java_path/bin/java" ]; then
+                export JAVA_HOME="$java_path"
+                echo "JAVA_HOME=$java_path" >> $GITHUB_ENV
+                echo "Found and set JAVA_HOME to: $java_path"
+                "$java_path/bin/java" -version
+                break
+              fi
+            done
+            
+            # Last resort: use system java
+            if [ ! -d "$JAVA_HOME" ]; then
+              SYSTEM_JAVA=$(which java)
+              if [ -n "$SYSTEM_JAVA" ]; then
+                JAVA_HOME=$(dirname $(dirname $SYSTEM_JAVA))
+                echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
+                echo "Using system Java: $JAVA_HOME"
+              fi
+            fi
+          fi
+          
+          echo "Final JAVA_HOME: $JAVA_HOME"
 
       - name: 🏗 Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -102,8 +139,17 @@ jobs:
       - name: 🔨 Build Android APK
         working-directory: android
         run: |
+          echo "Building with JAVA_HOME: $JAVA_HOME"
+          
+          # Verify Java is accessible
+          if [ -f "$JAVA_HOME/bin/java" ]; then
+            "$JAVA_HOME/bin/java" -version
+          else
+            echo "Warning: JAVA_HOME/bin/java not found, using system java"
+            java -version
+          fi
+          
           chmod +x ./gradlew
-          export JAVA_HOME=$JAVA_HOME
           ./gradlew assembleRelease --no-daemon --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
 
