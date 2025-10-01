@@ -15,17 +15,23 @@ jobs:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🏗 Setup Node
+      - name: 🏗 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18.x
-          cache: npm
+          node-version: 18
+          cache: 'npm'
 
-      - name: 🏗 Setup Java
+      - name: 🏗 Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: 🔍 Verify Java Installation
+        run: |
+          echo "JAVA_HOME: $JAVA_HOME"
+          java -version
+          which java
 
       - name: 🏗 Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -94,31 +100,39 @@ jobs:
           df -h
 
       - name: 🔨 Build Android APK
+        working-directory: android
         run: |
-          cd android
           chmod +x ./gradlew
-          # Build with increased memory settings and optimizations
-          ./gradlew assembleRelease --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+          export JAVA_HOME=$JAVA_HOME
+          ./gradlew assembleRelease --no-daemon --stacktrace \
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
 
-      - name: 📦 Upload APK
+      - name: 📦 Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: RObiStream-release
           path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 90
 
-      - name: 🎉 Create Release
+      - name: 🎉 Create GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}
-          name: Release v${{ github.run_number }}
+          tag_name: v1.0.${{ github.run_number }}
+          name: RobiStream v1.0.${{ github.run_number }}
           body: |
-            ## What's New
-            - Bug fixes and improvements
-            - Performance enhancements
+            ## 🎬 RobiStream Release
             
-            ## Installation
+            ### What's New
+            - Performance improvements
+            - Bug fixes and optimizations
+            - UI enhancements
+            
+            ### 📥 Installation
             Download the APK below and install on your Android device.
+            
+            **Version:** 1.0.${{ github.run_number }}
+            **Build Date:** ${{ github.event.head_commit.timestamp }}
             
             **Note:** You may need to enable "Install from unknown sources" in your device settings.
           files: android/app/build/outputs/apk/release/app-release.apk
