@@ -46,10 +46,10 @@ jobs:
               exit 1
             fi
             cat > .env <<EOF
-MOBILE_API_BASE_URL=$MOBILE_API_BASE_URL
-MOBILE_API_KEY=$MOBILE_API_KEY
-ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
-EOF
+          MOBILE_API_BASE_URL=$MOBILE_API_BASE_URL
+          MOBILE_API_KEY=$MOBILE_API_KEY
+          ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+          EOF
           fi
           # Copy to android as a safety net for path resolution during bundling
           cp .env android/.env
