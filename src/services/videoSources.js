@@ -3,7 +3,7 @@ export const VIDEO_SOURCES = {
   // VIP Sources (Always on top)
   vip_fmftp: {
     id: "vip_fmftp",
-    name: "VIP FMFTP",
+    name: "Royal Cinema",
     type: "api",
     quality: "4K",
     icon: "👑",
@@ -17,7 +17,7 @@ export const VIDEO_SOURCES = {
       }
       return '';
     },
-    description: "VIP FMFTP - Premium 4K Source",
+    description: "Royal Cinema - Premium 4K Source",
     language: "Multi",
     isWorking: true,
     isApiBased: true,
@@ -27,7 +27,7 @@ export const VIDEO_SOURCES = {
 
   vip_moviebox: {
     id: "vip_moviebox",
-    name: "VIP MovieBox",
+    name: "Platinum Theater",
     type: "embed",
     quality: "4K",
     icon: "🎬",
@@ -41,7 +41,7 @@ export const VIDEO_SOURCES = {
       }
       return '';
     },
-    description: "VIP MovieBox - Premium 4K Source",
+    description: "Platinum Theater - Premium 4K Source",
     language: "Multi",
     isWorking: true,
     isVipSource: true,
@@ -50,7 +50,7 @@ export const VIDEO_SOURCES = {
 
   vip_roarzone: {
     id: "vip_roarzone",
-    name: "VIP RoarZone",
+    name: "Golden Stream",
     type: "api",
     quality: "4K",
     icon: "🦁",
@@ -64,7 +64,7 @@ export const VIDEO_SOURCES = {
       }
       return '';
     },
-    description: "VIP RoarZone - Premium 4K Source",
+    description: "Golden Stream - Premium 4K Source",
     language: "Multi",
     isWorking: true,
     isApiBased: true,
@@ -74,7 +74,7 @@ export const VIDEO_SOURCES = {
 
   vip_crazyctg: {
     id: "vip_crazyctg",
-    name: "VIP CrazyCTG",
+    name: "Diamond Play",
     type: "api",
     quality: "4K",
     icon: "🎯",
@@ -86,7 +86,7 @@ export const VIDEO_SOURCES = {
       }
       return '';
     },
-    description: "VIP CrazyCTG - Premium 4K Movies Only",
+    description: "Diamond Play - Premium 4K Movies Only",
     language: "Multi",
     isWorking: true,
     isApiBased: true,
@@ -96,7 +96,7 @@ export const VIDEO_SOURCES = {
 
   vip_binudon: {
     id: "vip_binudon",
-    name: "VIP Binudon",
+    name: "Elite Vision",
     type: "api",
     quality: "4K",
     icon: "🍜",
@@ -108,7 +108,7 @@ export const VIDEO_SOURCES = {
       }
       return '';
     },
-    description: "VIP Binudon - Premium 4K Movies Only",
+    description: "Elite Vision - Premium 4K Movies Only",
     language: "Multi",
     isWorking: true,
     isApiBased: true,
@@ -118,7 +118,7 @@ export const VIDEO_SOURCES = {
 
   vip_spdx: {
     id: "vip_spdx",
-    name: "VIP SPDX",
+    name: "Lightning Max",
     type: "api",
     quality: "4K",
     icon: "⚡",
@@ -130,7 +130,7 @@ export const VIDEO_SOURCES = {
       }
       return '';
     },
-    description: "VIP SPDX - Premium 4K Movies Only",
+    description: "Lightning Max - Premium 4K Movies Only",
     language: "Multi",
     isWorking: true,
     isApiBased: true,
@@ -140,7 +140,7 @@ export const VIDEO_SOURCES = {
 
   vip_hydrahd_scrape: {
     id: "vip_hydrahd_scrape",
-    name: "VIP HydraHD Scrape",
+    name: "Crystal Wave",
     type: "api",
     quality: "4K",
     icon: "🌊",
@@ -154,7 +154,7 @@ export const VIDEO_SOURCES = {
       }
       return '';
     },
-    description: "VIP HydraHD Scrape - Premium 4K Source",
+    description: "Crystal Wave - Premium 4K Source",
     language: "Multi",
     isWorking: true,
     isApiBased: true,
@@ -162,10 +162,32 @@ export const VIDEO_SOURCES = {
     priority: 7
   },
 
-  // Top Priority Sources (1-8)
+  vip_ridomovies: {
+    id: "vip_ridomovies",
+    name: "Silver Screen",
+    type: "api",
+    quality: "HD",
+    icon: "🎭",
+    movieOnly: true,
+    getApiUrl: (id, season, episode, type) => {
+      if (!id) return '';
+      if (type === 'movie') {
+        return `https://ridomovies.premiumhub.workers.dev/tmdb?id=${id}`;
+      }
+      return '';
+    },
+    description: "Silver Screen - Premium HD Movies Only",
+    language: "Multi",
+    isWorking: true,
+    isApiBased: true,
+    isVipSource: true,
+    priority: 8
+  },
+
+  // Top Priority Sources (1-9)
   videasy: {
     id: "videasy",
-    name: "Videasy",
+    name: "Ocean Stream",
     type: "embed",
     quality: "4K",
     icon: "📺",
@@ -177,80 +199,12 @@ export const VIDEO_SOURCES = {
     language: "Multi",
     isWorking: true,
     isPremiumSource: true,
-    priority: 8
-  },
-
-  vidjoy: {
-    id: "vidjoy",
-    name: "VidJoy",
-    type: "embed",
-    quality: "HD",
-    icon: "💡",
-    getUrl: (id, season, episode, type) => 
-      type === "movie"
-        ? `https://vidjoy.pro/embed/movie/${id}`
-        : `https://vidjoy.pro/embed/tv/${id}/${season}/${episode}`,
-    description: "Multi Audio Server",
-    language: "Multi",
-    isWorking: true,
-    isPremiumSource: true,
     priority: 9
-  },
-
-  hydrahd: {
-    id: "hydrahd",
-    name: "HydraHD",
-    type: "embed",
-    quality: "HD",
-    icon: "🌊",
-    getUrl: (id, season, episode, type) => 
-      type === "movie"
-        ? `https://hydrahd.net/embed/movie/${id}`
-        : `https://hydrahd.net/embed/tv/${id}/${season}/${episode}`,
-    description: "HydraHD - Multi Server",
-    language: "Multi",
-    isWorking: true,
-    isPremiumSource: true,
-    priority: 10
-  },
-
-  ridomovies: {
-    id: "ridomovies",
-    name: "RidoMovies",
-    type: "embed",
-    quality: "HD",
-    icon: "🎭",
-    getUrl: (id, season, episode, type) => 
-      type === "movie"
-        ? `https://ridomovies.com/embed/movie/${id}`
-        : `https://ridomovies.com/embed/tv/${id}/${season}/${episode}`,
-    description: "RidoMovies - Multi Server",
-    language: "Multi",
-    isWorking: true,
-    isPremiumSource: true,
-    priority: 11
-  },
-
-  vidlink: {
-    id: "vidlink",
-    name: "VidLink",
-    type: "embed",
-    quality: "HD",
-    icon: "🔗",
-    getUrl: (id, season, episode, type) => 
-      type === "movie"
-        ? `https://vidlink.to/embed/movie/${id}`
-        : `https://vidlink.to/embed/tv/${id}/${season}/${episode}`,
-    description: "VidLink - Multi Server",
-    language: "Multi",
-    isWorking: true,
-    isPremiumSource: true,
-    priority: 12
   },
 
   vidsrc: {
     id: "vidsrc",
-    name: "VidSrc",
+    name: "Thunder Play",
     type: "embed",
     quality: "HD",
     icon: "🎬",
@@ -258,16 +212,16 @@ export const VIDEO_SOURCES = {
       type === "movie"
         ? `https://vidsrc.cc/v2/embed/movie/${id}`
         : `https://vidsrc.cc/v2/embed/tv/${id}/${season}/${episode}`,
-    description: "VidSrc - Multi Server",
+    description: "Thunder Play - Multi Server",
     language: "Multi",
     isWorking: true,
     isPremiumSource: true,
-    priority: 13
+    priority: 10
   },
 
   vidsrc_v3: {
     id: "vidsrc_v3",
-    name: "VidSrc v3",
+    name: "Thunder Pro",
     type: "embed",
     quality: "HD",
     icon: "🎬",
@@ -275,16 +229,16 @@ export const VIDEO_SOURCES = {
       type === "movie"
         ? `https://vidsrc.cc/v3/embed/movie/${id}?autoPlay=false`
         : `https://vidsrc.cc/v3/embed/tv/${id}/${season}/${episode}?autoPlay=false`,
-    description: "VidSrc v3 - Enhanced Player",
+    description: "Thunder Pro - Enhanced Player",
     language: "Multi",
     isWorking: true,
     isPremiumSource: true,
-    priority: 14
+    priority: 11
   },
 
   xprime: {
     id: "xprime",
-    name: "XPrime",
+    name: "Stellar Watch",
     type: "embed",
     quality: "HD",
     icon: "⭐",
@@ -292,16 +246,16 @@ export const VIDEO_SOURCES = {
       type === "movie"
         ? `https://xprime.tv/watch/${id}`
         : `https://xprime.tv/watch/${id}/${season}/${episode}`,
-    description: "XPrime - Multi Server",
+    description: "Stellar Watch - Multi Server",
     language: "Multi",
     isWorking: true,
     isPremiumSource: true,
-    priority: 15
+    priority: 12
   },
 
   vidrock: {
     id: "vidrock",
-    name: "VidRock",
+    name: "Mountain View",
     type: "embed",
     quality: "HD",
     icon: "🪨",
@@ -309,16 +263,16 @@ export const VIDEO_SOURCES = {
       type === "movie"
         ? `https://vidrock.steep-bread-3c84.workers.dev/movie/${id}`
         : `https://vidrock.steep-bread-3c84.workers.dev/tv/${id}/${season}/${episode}`,
-    description: "VidRock - Premium HD Source",
+    description: "Mountain View - Premium HD Source",
     language: "Multi",
     isWorking: true,
     isPremiumSource: true,
-    priority: 16
+    priority: 13
   },
 
   spencerdevs: {
     id: "spencerdevs",
-    name: "SpencerDevs",
+    name: "Tech Hub",
     type: "embed",
     quality: "HD",
     icon: "⚙️",
@@ -326,62 +280,35 @@ export const VIDEO_SOURCES = {
       type === "movie"
         ? `https://spencerdevs.xyz/movie/${id}?theme=${theme}`
         : `https://spencerdevs.xyz/tv/${id}/${season}/${episode}?theme=${theme}`,
-    description: "SpencerDevs - Premium HD Source",
+    description: "Tech Hub - Premium HD Source",
     language: "Multi",
     isWorking: true,
     isPremiumSource: true,
-    priority: 17
+    priority: 14
   },
 
-  // Other Sources (9+)
-  // NontonGo Source
-  nontongo: {
-    id: "nontongo",
-    name: "NontonGo",
+  nhdapi: {
+    id: "nhdapi",
+    name: "Nexus Player",
     type: "embed",
     quality: "HD",
-    icon: "🎬",
-    getUrl: (id, season, episode, type) => {
-      if (!id) return '';
-      if (type === 'movie') {
-        return `https://www.NontonGo.win/embed/movie/${id}`;
-      } else if (type === 'tv') {
-        if (!season || !episode) return '';
-        return `https://www.NontonGo.win/embed/tv/${id}/${season}/${episode}`;
-      }
-      return '';
-    },
-    description: "NontonGo - TMDB ID Movie/TV Player",
-    language: "Multi",
-    isWorking: true,
-    timeoutAvoidance: true,
-    timeout: 45000, // 45 seconds timeout
-    retryAttempts: 3,
-    retryDelay: 2000, // 2 seconds between retries
-    keepAlive: true, // Keep connection alive
-    preloadStrategy: 'aggressive' // Preload content to avoid timeouts
-  },
-
-
-  mappletv: {
-    id: "mappletv",
-    name: "MappleTV",
-    type: "embed",
-    quality: "4K",
-    icon: "🍁",
+    icon: "🎯",
     getUrl: (id, season, episode, type) => 
       type === "movie"
-        ? `https://mappletv.uk/watch/movie/${id}?autoPlay=true&theme=4f46e5&startAt=0`
-        : `https://mappletv.uk/watch/tv/${id}-${season}-${episode}?autoPlay=true&autoNext=true&theme=4f46e5&startAt=0`,
-    description: "MappleTV - Modern Player",
+        ? `https://nhdapi.xyz/movie/${id}`
+        : `https://nhdapi.xyz/tv/${id}/${season}/${episode}`,
+    description: "Nexus Player - Premium HD Source",
     language: "Multi",
-    isWorking: true
+    isWorking: true,
+    isPremiumSource: true,
+    priority: 15
   },
 
+  // Other Sources (8+)
 
   vidify: {
     id: "vidify",
-    name: "Vidify",
+    name: "Cinema Magic",
     type: "embed",
     quality: "4K",
     icon: "🎪",
@@ -389,7 +316,7 @@ export const VIDEO_SOURCES = {
       type === "movie"
         ? `https://vidify.top/embed/movie/${id}`
         : `https://vidify.top/embed/tv/${id}/${season}/${episode}`,
-    description: "Vidify - 4K+ Multi Audio",
+    description: "Cinema Magic - 4K+ Multi Audio",
     language: "Multi",
     isWorking: true
   },
@@ -398,7 +325,7 @@ export const VIDEO_SOURCES = {
 
   movies111: {
     id: "movies111",
-    name: "111movies",
+    name: "Triple Cinema",
     type: "embed",
     quality: "HD",
     icon: "🎬",
@@ -406,14 +333,14 @@ export const VIDEO_SOURCES = {
       type === "movie"
         ? `https://111movies.com/movie/${id}`
         : `https://111movies.com/tv/${id}/${season}/${episode}`,
-    description: "111movies - Multi Server",
+    description: "Triple Cinema - Multi Server",
     language: "Multi",
     isWorking: true
   },
 
   qstream: {
     id: "qstream",
-    name: "QStream",
+    name: "Quick Watch",
     type: "embed",
     quality: "HD",
     icon: "🎬",
@@ -421,32 +348,14 @@ export const VIDEO_SOURCES = {
       type === "movie"
         ? `https://qstream-scrape.premiumhub.workers.dev/movie/${id}`
         : `https://qstream-scrape.premiumhub.workers.dev/episode/${id}`,
-    description: "QStream - Ad-Free Embed Player",
+    description: "Quick Watch - Ad-Free Embed Player",
     language: "Multi",
     isWorking: true
   },
-
-
-
-  beech: {
-    id: "beech",
-    name: "Beech",
-    type: "embed",
-    quality: "HD",
-    icon: "🌳",
-    getUrl: (id, season, episode, type) => 
-      type === "movie"
-        ? `https://www.beech.watch/watch/movie/${id}`
-        : `https://www.beech.watch/watch/tv/${id}`,
-    description: "Beech Server - Built-in Episode Selection",
-    language: "Multi",
-    isWorking: true
-  },
-
 
   godrive: {
     id: "godrive",
-    name: "GoDrive",
+    name: "Space Drive",
     type: "embed",
     quality: "HD",
     icon: "🚀",
@@ -461,7 +370,7 @@ export const VIDEO_SOURCES = {
 
   vidsrc_wtf_1: {
     id: "vidsrc_wtf_1",
-    name: "VidSrc API 1",
+    name: "Alpha Stream",
     type: "embed",
     quality: "HD",
     icon: "🌟",
@@ -482,7 +391,7 @@ export const VIDEO_SOURCES = {
 
   vidzee: {
     id: "vidzee",
-    name: "VidZee",
+    name: "Buzz Player",
     type: "embed",
     quality: "HD",
     icon: "🎬",
@@ -490,14 +399,14 @@ export const VIDEO_SOURCES = {
       type === "movie"
         ? `https://player.vidzee.wtf/embed/movie/${id}`
         : `https://player.vidzee.wtf/embed/tv/${id}/${season}/${episode}`,
-    description: "VidZee - Multi Audio Server",
+    description: "Buzz Player - Multi Audio Server",
     language: "Multi",
     isWorking: true
   },
 
   vidzee_4k: {
     id: "vidzee_4k",
-    name: "VidZee 4K",
+    name: "Ultra Buzz",
     type: "embed",
     quality: "4K",
     icon: "🎬",
@@ -505,45 +414,18 @@ export const VIDEO_SOURCES = {
       type === "movie"
         ? `https://player.vidzee.wtf/embed/movie/4k/${id}`
         : `https://player.vidzee.wtf/embed/tv/${id}/${season}/${episode}`,
-    description: "VidZee 4K - Ultra HD Quality",
+    description: "Ultra Buzz - Ultra HD Quality",
     language: "Multi",
     isWorking: true
   },
   
-  // Smashy Source: Accepts IMDB (tt prefix) or TMDB ID for movies/TV
-  smashy: {
-    id: "smashy",
-    name: "Smashy",
-    type: "embed",
-    quality: "HD",
-    icon: "💥",
-    getUrl: (id, season, episode, type) => {
-      if (!id) return '';
-      if (type === 'movie') {
-        // Advanced: add ?btPosition=20&playerList=D|SU|F|FMD|J&remove=videoPlayer|watchWithFriends|addSubtitles|search&startTime=0&subLang=English as needed
-        return `https://player.smashy.stream/movie/${id}`;
-      } else if (type === 'tv') {
-        if (!season || !episode) return '';
-        return `https://player.smashy.stream/tv/${id}?s=${season}&e=${episode}`;
-      }
-      return '';
-    },
-    description: "Smashy - Accepts IMDB (tt) or TMDB ID. Advanced player features.",
-    language: "Multi",
-    isWorking: true
-  },
-
-
-
-
-
 };
 
 // Anime Sources
 export const ANIME_SOURCES = {
   vidsrc_anime_sub: {
     id: "vidsrc_anime_sub",
-    name: "VidSrc (Sub)",
+    name: "Thunder Anime (Sub)",
     type: "embed",
     quality: "HD",
     icon: "🎌",
@@ -553,14 +435,14 @@ export const ANIME_SOURCES = {
       // AniList ID must have 'ani' prefix
       return `https://vidsrc.cc/v2/embed/anime/ani${id}/${episodeNum}/sub?autoPlay=false&autoSkipIntro=true`;
     },
-    description: "VidSrc - Japanese with Subtitles",
+    description: "Thunder Anime - Japanese with Subtitles",
     language: "Japanese (Sub)",
     isWorking: true
   },
 
   vidsrc_anime_dub: {
     id: "vidsrc_anime_dub",
-    name: "VidSrc (Dub)",
+    name: "Thunder Anime (Dub)",
     type: "embed",
     quality: "HD",
     icon: "🎌",
@@ -570,14 +452,14 @@ export const ANIME_SOURCES = {
       // AniList ID must have 'ani' prefix
       return `https://vidsrc.cc/v2/embed/anime/ani${id}/${episodeNum}/dub?autoPlay=false&autoSkipIntro=true`;
     },
-    description: "VidSrc - English Dubbed",
+    description: "Thunder Anime - English Dubbed",
     language: "English (Dub)",
     isWorking: true
   },
 
   videasy_anime_sub: {
     id: "videasy_anime_sub",
-    name: "Videasy (Sub)",
+    name: "Ocean Anime (Sub)",
     type: "embed",
     quality: "HD",
     icon: "🎯",
@@ -587,14 +469,14 @@ export const ANIME_SOURCES = {
       // Default is sub, no dub parameter needed
       return `https://player.videasy.net/anime/${id}/${episodeNum}`;
     },
-    description: "Videasy - Japanese with Subtitles",
+    description: "Ocean Anime - Japanese with Subtitles",
     language: "Japanese (Sub)",
     isWorking: true
   },
 
   videasy_anime_dub: {
     id: "videasy_anime_dub",
-    name: "Videasy (Dub)",
+    name: "Ocean Anime (Dub)",
     type: "embed",
     quality: "HD",
     icon: "🎯",
@@ -603,7 +485,7 @@ export const ANIME_SOURCES = {
       // Videasy anime format: https://player.videasy.net/anime/anilist_id/episode?dub=true
       return `https://player.videasy.net/anime/${id}/${episodeNum}?dub=true`;
     },
-    description: "Videasy - English Dubbed",
+    description: "Ocean Anime - English Dubbed",
     language: "English (Dub)",
     isWorking: true
   },
@@ -867,6 +749,29 @@ export const ENHANCED_ANIME_SOURCES = {
     priority: 7
   },
 
+  tmdb_vip_ridomovies: {
+    id: "tmdb_vip_ridomovies",
+    name: "VIP RidoMovies (Anime)",
+    type: "api",
+    quality: "HD",
+    icon: "🎭",
+    movieOnly: true,
+    getApiUrl: (tmdbId, season, episode, type) => {
+      if (!tmdbId) return '';
+      if (type === 'movie') {
+        return `https://ridomovies.premiumhub.workers.dev/tmdb?id=${tmdbId}`;
+      }
+      return '';
+    },
+    description: "VIP RidoMovies - Premium HD Anime Movies Only",
+    language: "Multi",
+    isWorking: true,
+    isApiBased: true,
+    isVipSource: true,
+    requiresTMDB: true,
+    priority: 8
+  },
+
   // All Premium Sources for Anime (using TMDB ID)
   tmdb_videasy_premium: {
     id: "tmdb_videasy_premium",
@@ -883,79 +788,7 @@ export const ENHANCED_ANIME_SOURCES = {
     isWorking: true,
     isPremiumSource: true,
     requiresTMDB: true,
-    priority: 8
-  },
-
-  tmdb_vidjoy_premium: {
-    id: "tmdb_vidjoy_premium",
-    name: "VidJoy Premium (Anime)",
-    type: "embed",
-    quality: "HD",
-    icon: "💡",
-    getUrl: (tmdbId, season, episode, type) => 
-      type === "movie"
-        ? `https://vidjoy.pro/embed/movie/${tmdbId}`
-        : `https://vidjoy.pro/embed/tv/${tmdbId}/${season}/${episode}`,
-    description: "VidJoy Premium - HD Anime Source",
-    language: "Multi",
-    isWorking: true,
-    isPremiumSource: true,
-    requiresTMDB: true,
     priority: 9
-  },
-
-  tmdb_hydrahd_premium: {
-    id: "tmdb_hydrahd_premium",
-    name: "HydraHD Premium (Anime)",
-    type: "embed",
-    quality: "HD",
-    icon: "🌊",
-    getUrl: (tmdbId, season, episode, type) => 
-      type === "movie"
-        ? `https://hydrahd.net/embed/movie/${tmdbId}`
-        : `https://hydrahd.net/embed/tv/${tmdbId}/${season}/${episode}`,
-    description: "HydraHD Premium - HD Anime Source",
-    language: "Multi",
-    isWorking: true,
-    isPremiumSource: true,
-    requiresTMDB: true,
-    priority: 10
-  },
-
-  tmdb_ridomovies_premium: {
-    id: "tmdb_ridomovies_premium",
-    name: "RidoMovies Premium (Anime)",
-    type: "embed",
-    quality: "HD",
-    icon: "🎭",
-    getUrl: (tmdbId, season, episode, type) => 
-      type === "movie"
-        ? `https://ridomovies.com/embed/movie/${tmdbId}`
-        : `https://ridomovies.com/embed/tv/${tmdbId}/${season}/${episode}`,
-    description: "RidoMovies Premium - HD Anime Source",
-    language: "Multi",
-    isWorking: true,
-    isPremiumSource: true,
-    requiresTMDB: true,
-    priority: 11
-  },
-
-  tmdb_vidlink_premium: {
-    id: "tmdb_vidlink_premium",
-    name: "VidLink Premium (Anime)",
-    type: "embed",
-    quality: "HD",
-    icon: "🔗",
-    getUrl: (tmdbId, season, episode, type) => 
-      type === "movie"
-        ? `https://vidlink.to/embed/movie/${tmdbId}`
-        : `https://vidlink.to/embed/tv/${tmdbId}/${season}/${episode}`,
-    description: "VidLink Premium - HD Anime Source",
-    language: "Multi",
-    isWorking: true,
-    isPremiumSource: true,
-    requiresTMDB: true,
-    priority: 12
   },
 
   tmdb_vidsrc_premium: {
@@ -973,7 +806,7 @@ export const ENHANCED_ANIME_SOURCES = {
     isWorking: true,
     isPremiumSource: true,
     requiresTMDB: true,
-    priority: 13
+    priority: 10
   },
 
   tmdb_vidsrc_v3_premium: {
@@ -991,7 +824,7 @@ export const ENHANCED_ANIME_SOURCES = {
     isWorking: true,
     isPremiumSource: true,
     requiresTMDB: true,
-    priority: 14
+    priority: 11
   },
 
   tmdb_xprime_premium: {
@@ -1009,7 +842,7 @@ export const ENHANCED_ANIME_SOURCES = {
     isWorking: true,
     isPremiumSource: true,
     requiresTMDB: true,
-    priority: 15
+    priority: 12
   },
 
   tmdb_vidrock_premium: {
@@ -1027,7 +860,7 @@ export const ENHANCED_ANIME_SOURCES = {
     isWorking: true,
     isPremiumSource: true,
     requiresTMDB: true,
-    priority: 16
+    priority: 13
   },
 
   tmdb_spencerdevs_premium: {
@@ -1045,23 +878,25 @@ export const ENHANCED_ANIME_SOURCES = {
     isWorking: true,
     isPremiumSource: true,
     requiresTMDB: true,
-    priority: 17
+    priority: 14
   },
 
-  tmdb_mappletv: {
-    id: "tmdb_mappletv",
-    name: "MappleTV (TMDB)",
+  tmdb_nhdapi_premium: {
+    id: "tmdb_nhdapi_premium",
+    name: "NhdAPI Premium (Anime)",
     type: "embed",
-    quality: "4K",
-    icon: "🍁",
+    quality: "HD",
+    icon: "🎯",
     getUrl: (tmdbId, season, episode, type) => 
       type === "movie"
-        ? `https://mappletv.uk/watch/movie/${tmdbId}?autoPlay=true&theme=4f46e5&startAt=0`
-        : `https://mappletv.uk/watch/tv/${tmdbId}-${season}-${episode}?autoPlay=true&autoNext=true&theme=4f46e5&startAt=0`,
-    description: "MappleTV with TMDB ID",
+        ? `https://nhdapi.xyz/movie/${tmdbId}`
+        : `https://nhdapi.xyz/tv/${tmdbId}/${season}/${episode}`,
+    description: "NhdAPI Premium - HD Anime Source",
     language: "Multi",
     isWorking: true,
+    isPremiumSource: true,
     requiresTMDB: true,
+    priority: 15
   },
 };
 

@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_dispatch: # Allows manual trigger
 
+# Add permissions for GitHub token
+permissions:
+  contents: write  # Required to create releases
+  packages: write  # Required to upload artifacts
+  pull-requests: read  # Required for PR builds
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -85,46 +91,47 @@ jobs:
           echo "\n=== JVM Directory Listing ==="
           ls -la /usr/lib/jvm/ 2>/dev/null || echo "No JVM directory found"
 
-      - name: 🔧 Manual Java Setup (if needed)
+      - name: 🔧 Fix Java Setup (Always Run)
         run: |
           echo "Initial JAVA_HOME: $JAVA_HOME"
+          
+          # Check if JAVA_HOME is a symlink and resolve it
+          if [ -L "$JAVA_HOME" ]; then
+            RESOLVED_JAVA_HOME=$(readlink -f "$JAVA_HOME")
+            echo "🔗 JAVA_HOME is a symlink: $JAVA_HOME -> $RESOLVED_JAVA_HOME"
+            
+            if [ -f "$RESOLVED_JAVA_HOME/bin/java" ]; then
+              echo "✅ Resolved symlink - using: $RESOLVED_JAVA_HOME"
+              echo "JAVA_HOME=$RESOLVED_JAVA_HOME" >> $GITHUB_ENV
+              export JAVA_HOME="$RESOLVED_JAVA_HOME"
+              "$RESOLVED_JAVA_HOME/bin/java" -version
+            else
+              echo "⚠️ Symlink target is invalid: $RESOLVED_JAVA_HOME"
+            fi
+          fi
           
           # Function to find working Java installation
           find_working_java() {
             local java_paths=(
               "$JAVA_HOME"
+              "/usr/lib/jvm/temurin-17-jdk-amd64"
+              "/usr/lib/jvm/temurin-11-jdk-amd64"
+              "/usr/lib/jvm/temurin-21-jdk-amd64"
               "/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17*/x64"
               "/opt/hostedtoolcache/Java_Adopt_jdk/17*/x64"
               "/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/11*/x64"
               "/opt/hostedtoolcache/Java_Adopt_jdk/11*/x64"
               "/usr/lib/jvm/java-*-openjdk*"
-              "/usr/lib/jvm/temurin-*"
             )
             
             for path_pattern in "${java_paths[@]}"; do
               for java_path in $path_pattern; do
-                if [ -d "$java_path" ]; then
-                  echo "Checking: $java_path"
-                  
-                  # Check for java binary in bin directory
-                  if [ -f "$java_path/bin/java" ]; then
-                    echo "✅ Found working Java at: $java_path"
-                    echo "JAVA_HOME=$java_path" >> $GITHUB_ENV
-                    export JAVA_HOME="$java_path"
-                    "$java_path/bin/java" -version
-                    return 0
-                  fi
-                  
-                  # Sometimes Java is nested deeper - check subdirectories
-                  for subdir in "$java_path"/*; do
-                    if [ -f "$subdir/bin/java" ]; then
-                      echo "✅ Found working Java in subdirectory: $subdir"
-                      echo "JAVA_HOME=$subdir" >> $GITHUB_ENV
-                      export JAVA_HOME="$subdir"
-                      "$subdir/bin/java" -version
-                      return 0
-                    fi
-                  done
+                if [ -d "$java_path" ] && [ -f "$java_path/bin/java" ]; then
+                  echo "✅ Found working Java at: $java_path"
+                  echo "JAVA_HOME=$java_path" >> $GITHUB_ENV
+                  export JAVA_HOME="$java_path"
+                  "$java_path/bin/java" -version
+                  return 0
                 fi
               done
             done
@@ -146,12 +153,9 @@ jobs:
             return 1
           }
           
-          # Check if current JAVA_HOME is valid
+          # Always verify JAVA_HOME is valid
           if [ ! -f "$JAVA_HOME/bin/java" ]; then
-            echo "⚠️ Current JAVA_HOME is invalid: $JAVA_HOME"
-            echo "Directory contents:"
-            ls -la "$JAVA_HOME" 2>/dev/null || echo "Directory does not exist"
-            
+            echo "⚠️ JAVA_HOME is invalid: $JAVA_HOME"
             echo "Searching for valid Java installation..."
             if ! find_working_java; then
               echo "❌ Failed to find any working Java installation"
@@ -268,27 +272,23 @@ jobs:
           
           # Final verification that Java is accessible
           if [ -f "$JAVA_HOME/bin/java" ]; then
-            echo "✅ Java binary found at: $JAVA_HOME/bin/java"
+            echo "✅ Java binary confirmed at: $JAVA_HOME/bin/java"
             "$JAVA_HOME/bin/java" -version
           else
-            echo "❌ JAVA_HOME/bin/java not found at: $JAVA_HOME/bin/java"
-            echo "Available files in JAVA_HOME:"
-            ls -la "$JAVA_HOME" 2>/dev/null || echo "JAVA_HOME directory not accessible"
-            
-            # Try to find java in the current JAVA_HOME structure
-            echo "Searching for java binary in JAVA_HOME..."
-            find "$JAVA_HOME" -name "java" -type f 2>/dev/null | head -5
-            
-            # Use system java as fallback
-            echo "Using system java as fallback"
-            java -version
+            echo "❌ JAVA_HOME/bin/java still not found, this should not happen!"
+            echo "JAVA_HOME: $JAVA_HOME"
+            echo "Contents:"
+            ls -la "$JAVA_HOME" 2>/dev/null || echo "Directory not accessible"
+            exit 1
           fi
           
-          echo "Gradle build starting..."
+          echo "Starting Gradle build..."
           chmod +x ./gradlew
           
-          # Use explicit JAVA_HOME in Gradle execution
+          # Set JAVA_HOME for Gradle in multiple ways
           export JAVA_HOME="$JAVA_HOME"
+          export GRADLE_OPTS="-Dorg.gradle.java.home=$JAVA_HOME"
+          
           ./gradlew assembleRelease --no-daemon --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" \
             -Dorg.gradle.java.home="$JAVA_HOME"
@@ -300,6 +300,35 @@ jobs:
           path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 90
 
+      - name: 🔍 Debug GitHub Token Permissions
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "=== GitHub Token Permissions Debug ==="
+          echo "Repository: ${{ github.repository }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          
+          # Test token permissions
+          echo "\nTesting GitHub token permissions..."
+          
+          # Check if we can access repository info
+          echo "Repository access:"
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}" \
+            | jq -r '.permissions // "No permissions info"' || echo "Failed to check repo permissions"
+          
+          # Check if we can list releases
+          echo "\nReleases access:"
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases" \
+            | jq -r 'length' || echo "Failed to access releases"
+          
+          echo "\nIf permissions are insufficient, check:"
+          echo "1. Repository Settings > Actions > General > Workflow permissions"
+          echo "2. Should be set to 'Read and write permissions'"
+          echo "3. 'Allow GitHub Actions to create and approve pull requests' should be checked"
+          
       - name: 🎉 Create GitHub Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
@@ -307,22 +336,49 @@ jobs:
           tag_name: v1.0.${{ github.run_number }}
           name: RobiStream v1.0.${{ github.run_number }}
           body: |
-            ## 🎬 RobiStream Release
+            ## 🎬 RobiStream Release v1.0.${{ github.run_number }}
             
-            ### What's New
-            - Performance improvements
-            - Bug fixes and optimizations
-            - UI enhancements
+            ### 📱 What's New
+            - Performance improvements and bug fixes
+            - Enhanced user interface
+            - Stability improvements
             
-            ### 📥 Installation
-            Download the APK below and install on your Android device.
+            ### 📥 Installation Instructions
+            1. Download the APK file below
+            2. Enable "Install from unknown sources" in your Android settings
+            3. Install the downloaded APK
             
-            **Version:** 1.0.${{ github.run_number }}
-            **Build Date:** ${{ github.event.head_commit.timestamp }}
+            ### 📋 Build Information
+            - **Version:** 1.0.${{ github.run_number }}
+            - **Build Date:** ${{ github.event.head_commit.timestamp }}
+            - **Commit:** ${{ github.sha }}
+            - **Branch:** ${{ github.ref_name }}
             
-            **Note:** You may need to enable "Install from unknown sources" in your device settings.
+            ### 🔗 Auto-Update
+            This release supports automatic updates through the in-app update system.
           files: android/app/build/outputs/apk/release/app-release.apk
           draft: false
           prerelease: false
+          make_latest: true
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 🔍 Verify Release Creation
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "✅ GitHub Release Creation Summary:"
+          echo "Tag: v1.0.${{ github.run_number }}"
+          echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/v1.0.${{ github.run_number }}"
+          echo "API URL: https://api.github.com/repos/${{ github.repository }}/releases/tags/v1.0.${{ github.run_number }}"
+          
+          # Wait a moment for release to be available
+          sleep 5
+          
+          # Verify release exists via API
+          echo "\nVerifying release via GitHub API..."
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/v1.0.${{ github.run_number }}" \
+            | jq -r '.tag_name, .name, .published_at' || echo "Release verification failed"
+          
+          echo "\n✅ Auto-update system should now detect this release!"

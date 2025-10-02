@@ -24,7 +24,6 @@ import ProfileScreen from './src/screens/AccountScreen'
 import DevicesScreen from './src/screens/DevicesScreen'
 import ContinueWatchingScreen from './src/screens/ContinueWatchingScreen'
 import Colors from './src/constants/Colors'
-import { initAdBlocker } from './src/adblock/AdBlocker'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
 import { HomeProvider } from './src/context/HomeContext'
 import PremiumBottomNav from './src/components/navigation/PremiumBottomNav'
@@ -129,9 +128,7 @@ export default function App() {
     return () => clearInterval(interval)
   }, [])
 
-  useEffect(() => {
-    initAdBlocker()
-  }, [])
+
 
   const linking = useMemo(
     () => ({

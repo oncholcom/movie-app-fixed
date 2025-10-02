@@ -24,8 +24,7 @@ import tmdbAnimeMapper from '../services/tmdbAnimeMapping';
 import anilistApi from '../services/anilistApi';
 import { addToWatchlist as addToLocalWatchlist, updateTVShowEpisode } from '../utils/watchlist';
 import { getMovies, getTVShows, convertTMDBtoIMDB } from '../services/api';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import VLCPlayer from '../components/common/VLCPlayer';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { ContinueWatchingService, WatchlistService } from '../services/mobile';
 import { useAuth } from '../context/AuthContext';
 import PremiumRequiredModal from '../components/common/PremiumRequiredModal';
@@ -82,9 +81,9 @@ const VideoPlayerScreen = ({ route, navigation }) => {
       StatusBar.setHidden(true, 'none');
       // Set transparent system UI background to prevent dark overlay
       SystemUI.setBackgroundColorAsync('transparent');
-      // Enable immersive mode for all video sources
+      // Use edge-to-edge mode instead of immersive to preserve navigation access
       if (SystemUI.setLayoutModeAsync) {
-        SystemUI.setLayoutModeAsync('immersive');
+        SystemUI.setLayoutModeAsync('edge-to-edge');
       }
     };
 
@@ -108,9 +107,6 @@ const VideoPlayerScreen = ({ route, navigation }) => {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       StatusBar.setHidden(false, 'slide');
       SystemUI.setBackgroundColorAsync('#000000');
-      if (SystemUI.setLayoutModeAsync) {
-        SystemUI.setLayoutModeAsync('edge-to-edge');
-      }
       backHandler.remove();
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
@@ -227,10 +223,6 @@ const VideoPlayerScreen = ({ route, navigation }) => {
 
   const resetControlsTimer = () => {
     // Disabled - no auto-showing controls
-  };
-
-  const handleScreenTouch = () => {
-    // Disabled - no controls on screen touch
   };
 
   const handleBackPress = () => {
@@ -707,6 +699,39 @@ const VideoPlayerScreen = ({ route, navigation }) => {
           setCurrentUrl(embedUrl);
           setLoading(false);
           return;
+        } else if (sourceId === 'vip_ridomovies' || sourceId === 'tmdb_vip_ridomovies') {
+          console.log('[VIP RidoMovies] Full API response:', data);
+          
+          // Check if request was successful
+          if (!data.success) {
+            if (data.error === 'Invalid movie ID format') {
+              throw new Error('Movie ID format is invalid for RidoMovies');
+            } else if (data.error === 'Movie not found') {
+              throw new Error('Movie not found in RidoMovies database');
+            } else {
+              throw new Error(data.error || 'RidoMovies API error');
+            }
+          }
+          
+          // Check if we have embed codes
+          if (!data.embedCode || !Array.isArray(data.embedCode) || data.embedCode.length === 0) {
+            throw new Error('No embed codes found in VIP RidoMovies response');
+          }
+          
+          // Use the first available embed URL
+          const firstEmbed = data.embedCode[0];
+          if (!firstEmbed.embedUrl) {
+            throw new Error('No embed URL found in VIP RidoMovies embed code');
+          }
+          
+          const embedUrl = firstEmbed.embedUrl;
+          console.log('[VIP RidoMovies] Using embed URL:', embedUrl);
+          console.log('[VIP RidoMovies] Quality:', firstEmbed.quality);
+          console.log('[VIP RidoMovies] Language:', firstEmbed.lang);
+          
+          setCurrentUrl(embedUrl);
+          setLoading(false);
+          return;
         } else if (sourceId === 'ftpbd_hindi') {
           console.log('[FTPBD Hindi] Full API response:', data);
           
@@ -761,8 +786,8 @@ const VideoPlayerScreen = ({ route, navigation }) => {
       console.error('Error loading video source:', err);
       
       // Auto-skip VIP sources if they fail
-      if (sourceId === 'vip_fmftp' || sourceId === 'vip_moviebox' || sourceId === 'vip_roarzone' || sourceId === 'vip_crazyctg' || sourceId === 'vip_binudon' || sourceId === 'vip_spdx' || sourceId === 'vip_hydrahd_scrape' || 
-          sourceId === 'tmdb_vip_fmftp' || sourceId === 'tmdb_vip_moviebox' || sourceId === 'tmdb_vip_roarzone' || sourceId === 'tmdb_vip_crazyctg' || sourceId === 'tmdb_vip_binudon' || sourceId === 'tmdb_vip_spdx' || sourceId === 'tmdb_vip_hydrahd_scrape') {
+      if (sourceId === 'vip_fmftp' || sourceId === 'vip_moviebox' || sourceId === 'vip_roarzone' || sourceId === 'vip_crazyctg' || sourceId === 'vip_binudon' || sourceId === 'vip_spdx' || sourceId === 'vip_hydrahd_scrape' || sourceId === 'vip_ridomovies' ||
+          sourceId === 'tmdb_vip_fmftp' || sourceId === 'tmdb_vip_moviebox' || sourceId === 'tmdb_vip_roarzone' || sourceId === 'tmdb_vip_crazyctg' || sourceId === 'tmdb_vip_binudon' || sourceId === 'tmdb_vip_spdx' || sourceId === 'tmdb_vip_hydrahd_scrape' || sourceId === 'tmdb_vip_ridomovies') {
         console.log(`[${sourceId}] Source failed, auto-skipping to next source`);
         const availableSources = getAvailableSources(contentType, isAnime);
         const currentIndex = availableSources.findIndex(([id]) => id === sourceId);
@@ -844,47 +869,20 @@ const VideoPlayerScreen = ({ route, navigation }) => {
       // Restore status bar and system UI
       StatusBar.setHidden(false, 'slide');
       SystemUI.setBackgroundColorAsync('#000000');
-      if (SystemUI.setLayoutModeAsync) {
-        SystemUI.setLayoutModeAsync('edge-to-edge');
-      }
     } catch (error) {
       console.warn('Error restoring orientation:', error);
     }
     navigation.goBack();
   };
 
-  // Determine if the current source is uembed_dubbed
-  const isUEmbedDubbed = selectedSource === 'uembed_dubbed';
-
   // Get safe area insets
   const insets = useSafeAreaInsets();
 
-  // Hide status bar and enable immersive mode for uembed_dubbed
-  useEffect(() => {
-    if (isUEmbedDubbed) {
-      StatusBar.setHidden(true, 'none');
-      // Set transparent background instead of black
-      SystemUI.setBackgroundColorAsync('transparent');
-      if (SystemUI.setLayoutModeAsync) {
-        SystemUI.setLayoutModeAsync('immersive');
-      }
-    }
-    return () => {
-      if (isUEmbedDubbed) {
-        StatusBar.setHidden(false, 'slide');
-        if (SystemUI.setLayoutModeAsync) {
-          SystemUI.setLayoutModeAsync('edge-to-edge');
-        }
-      }
-    };
-  }, [isUEmbedDubbed]);
-
   return (
-    <TouchableOpacity 
-      style={styles.container} 
-      activeOpacity={1}
-      onPress={handleScreenTouch}
-    >
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
+      <View 
+        style={styles.container}
+      >
       {/* Loading State */}
       {loading && (
         <View style={styles.loadingContainer}>
@@ -964,14 +962,12 @@ const VideoPlayerScreen = ({ route, navigation }) => {
                 </TouchableOpacity>
               )}
               
-              <VLCPlayer
-                m3u8Url={selectedAudioTrack?.file || m3u8Sources[0].file}
-                title={`${route.params.title} - ${selectedAudioTrack?.title || m3u8Sources[0].title}`}
-                onError={(errorMessage) => {
-                  console.log('[VLC Player] Error:', errorMessage);
-                  setError(errorMessage);
-                }}
-              />
+              {/* VLCPlayer removed - will implement clean player later */}
+              <View style={styles.webview}>
+                <Text style={{ color: 'white', textAlign: 'center', marginTop: 50 }}>
+                  M3U8 Player Coming Soon
+                </Text>
+              </View>
             </View>
           )}
         </View>
@@ -998,14 +994,26 @@ const VideoPlayerScreen = ({ route, navigation }) => {
       {/* Place back button in top-left, sources button in top-right, leave center-top empty */}
       <View style={styles.controlsContainer}>
         <TouchableOpacity
-          style={[styles.backButton, isUEmbedDubbed ? styles.topLeftButtonUEmbed : styles.topLeftButton]}
+          style={[
+            styles.backButton, 
+            styles.topLeftButton,
+            {
+              left: Math.max(10, insets.left), // Move closer to edge, respect safe area
+            }
+          ]}
           onPress={handleClose}
           pointerEvents="auto"
         >
           <Ionicons name="arrow-back" size={28} color={Colors.white} />
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.sourcesButton, isUEmbedDubbed ? styles.topRightButtonUEmbed : styles.topRightButton]}
+          style={[
+            styles.sourcesButton, 
+            styles.topRightButton,
+            {
+              right: Math.max(10, insets.right), // Move closer to edge, respect safe area
+            }
+          ]}
           onPress={() => {
             setShowSources(true);
             // Scroll to selected source after modal opens
@@ -1110,19 +1118,19 @@ const VideoPlayerScreen = ({ route, navigation }) => {
           </ScrollView>
         </View>
       </Modal>
-    </TouchableOpacity>
+    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: Colors.black,
+  },
   container: {
     flex: 1,
     backgroundColor: 'transparent',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
   controlsContainer: {
     position: 'absolute',
@@ -1137,11 +1145,6 @@ const styles = StyleSheet.create({
   webview: {
     flex: 1,
     backgroundColor: 'transparent',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
   
   // Always Visible Controls (Back & Sources)
@@ -1492,25 +1495,11 @@ const styles = StyleSheet.create({
   topLeftButton: {
     position: 'absolute',
     top: Platform.OS === 'android' ? 50 : 60,
-    left: 20,
     zIndex: 1000,
   },
   topRightButton: {
     position: 'absolute',
     top: Platform.OS === 'android' ? 50 : 60,
-    right: 20,
-    zIndex: 1000,
-  },
-  topLeftButtonUEmbed: {
-    position: 'absolute',
-    top: Platform.OS === 'android' ? 50 : 60,
-    left: 20,
-    zIndex: 1000,
-  },
-  topRightButtonUEmbed: {
-    position: 'absolute',
-    top: Platform.OS === 'android' ? 50 : 60,
-    right: 20,
     zIndex: 1000,
   },
   languageOverlay: {
