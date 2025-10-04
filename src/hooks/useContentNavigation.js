@@ -13,17 +13,26 @@ export const useContentNavigation = () => {
 
   // Handle item press - navigate to detail screen
   const handleItemPress = useCallback((item) => {
-    // Handle Continue Watching items that have a 'type' property
-    if (item.type) {
-      if (item.type === 'tv') {
-        navigation.navigate('TVDetail', { tvId: item.id })
-      } else if (item.type === 'movie') {
-        navigation.navigate('MovieDetail', { movieId: item.id })
-      }
+    if (!item) return
+
+    const itemType = item.type || item.contentType || (item.first_air_date ? 'tv' : item.release_date ? 'movie' : null)
+
+    if (itemType === 'anime') {
+      navigation.navigate('AnimeDetail', { animeId: item.id || item.animeId })
       return
     }
 
-    // Handle regular items from API that have first_air_date
+    if (itemType === 'tv') {
+      navigation.navigate('TVDetail', { tvId: item.id })
+      return
+    }
+
+    if (itemType === 'movie') {
+      navigation.navigate('MovieDetail', { movieId: item.id })
+      return
+    }
+
+    // Fallback for items without explicit type
     const screenName = item.first_air_date ? 'TVDetail' : 'MovieDetail'
     const paramName = item.first_air_date ? 'tvId' : 'movieId'
     navigation.navigate(screenName, { [paramName]: item.id })
@@ -38,16 +47,17 @@ export const useContentNavigation = () => {
       return false
     }
 
-    const contentType = item.first_air_date ? 'tv' : 'movie'
+    const contentType = item.type || item.contentType || (item.first_air_date ? 'tv' : 'movie')
     const title = item.title || item.name
 
     navigation.navigate('VideoPlayer', {
       movieId: contentType === 'movie' ? item.id : null,
       tvId: contentType === 'tv' ? item.id : null,
+      animeId: contentType === 'anime' ? (item.id || item.animeId) : null,
       contentType: contentType,
       title: title,
-      season: 1,
-      episode: 1,
+      season: item.season ?? 1,
+      episode: item.episode ?? 1,
     })
 
     return true

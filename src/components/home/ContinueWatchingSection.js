@@ -73,10 +73,57 @@ const resolveProgressDisplay = (item) => {
   return { ratio: null, label: 'Continue watching' }
 }
 
-const ContinueWatchingCard = ({ item, onPress, onRemove }) => {
+const ContinueWatchingCard = ({ item, onPress, onRemove, onPlay }) => {
   const { ratio: progressRatio, label: progressLabel } = resolveProgressDisplay(item)
   const posterUrl = buildPosterUrl(item)
   const title = item.title || item.name
+
+  const handlePlay = () => {
+    if (typeof onPlay === 'function') {
+      onPlay(item)
+    } else if (typeof onPress === 'function') {
+      onPress(item)
+    }
+  }
+
+  const renderEpisodeLabel = () => {
+    const season = item.season ?? item.seasonNumber
+    const episode = item.episode ?? item.episodeNumber
+    const episodeTitle = item.episodeTitle
+
+    if (item.type === 'anime') {
+      if (season && episode) {
+        return `Season ${season} · Episode ${episode}`
+      }
+      if (episode && episodeTitle) {
+        return `Episode ${episode} · ${episodeTitle}`
+      }
+      if (episode) {
+        return `Episode ${episode}`
+      }
+      if (episodeTitle) {
+        return episodeTitle
+      }
+      return null
+    }
+
+    if (item.type === 'tv') {
+      if (season && episode) {
+        return `S${season} · E${episode}`
+      }
+      if (episodeTitle) {
+        return episodeTitle
+      }
+    }
+
+    if (episodeTitle) {
+      return episodeTitle
+    }
+
+    return null
+  }
+
+  const episodeLabel = renderEpisodeLabel()
 
   return (
     <TouchableOpacity style={styles.cardContainer} onPress={() => onPress(item)} activeOpacity={0.85}>
@@ -105,9 +152,9 @@ const ContinueWatchingCard = ({ item, onPress, onRemove }) => {
         </LinearGradient>
 
         <View style={styles.playButtonContainer}>
-          <View style={styles.playButton}>
+          <TouchableOpacity style={styles.playButton} onPress={handlePlay} activeOpacity={0.9}>
             <Ionicons name="play" size={16} color={Colors.white} />
-          </View>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.removeButton} onPress={() => onRemove(item)}>
@@ -120,10 +167,8 @@ const ContinueWatchingCard = ({ item, onPress, onRemove }) => {
           {title}
         </Text>
 
-        {item.type === 'tv' && item.season && item.episode && (
-          <Text style={styles.episodeInfo}>
-            S{item.season} · E{item.episode}
-          </Text>
+        {episodeLabel && (
+          <Text style={styles.episodeInfo}>{episodeLabel}</Text>
         )}
 
         <Text style={styles.continueText}>Continue Watching</Text>
@@ -132,12 +177,14 @@ const ContinueWatchingCard = ({ item, onPress, onRemove }) => {
   )
 }
 
-const ContinueWatchingSection = ({ onItemPress }) => {
+const ContinueWatchingSection = ({ onItemPress, onPlayPress }) => {
   const navigation = useNavigation()
   const { isAuthenticated } = useAuth()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  const handlePlay = onPlayPress || onItemPress
 
   const loadData = useCallback(async () => {
     try {
@@ -298,6 +345,7 @@ const ContinueWatchingSection = ({ onItemPress }) => {
             item={item}
             onPress={onItemPress}
             onRemove={handleRemoveItem}
+            onPlay={handlePlay}
           />
         ))}
       </ScrollView>

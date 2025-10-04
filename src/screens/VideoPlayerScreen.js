@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -19,8 +19,14 @@ import { Ionicons } from '@expo/vector-icons';
 import SmartWebView from '../components/common/SmartWebView';
 import Colors from '../constants/Colors';
 import { Spacing, BorderRadius } from '../styles/GlobalStyles';
-import { VIDEO_SOURCES, ANIME_SOURCES, getAvailableSources, getDefaultSource, getAnimeSourcesWithTMDB, ENHANCED_ANIME_SOURCES } from '../services/videoSources';
-import tmdbAnimeMapper from '../services/tmdbAnimeMapping';
+import {
+  VIDEO_SOURCES,
+  ANIME_SOURCES,
+  getAvailableSources as getBaseAvailableSources,
+  getDefaultSource,
+  getAnimeSourcesWithTMDB,
+  findBestTmdbMapping,
+} from '../services/videoSources';
 import anilistApi from '../services/anilistApi';
 import { addToWatchlist as addToLocalWatchlist, updateTVShowEpisode } from '../utils/watchlist';
 import { getMovies, getTVShows, convertTMDBtoIMDB } from '../services/api';
@@ -32,26 +38,32 @@ import PremiumRequiredModal from '../components/common/PremiumRequiredModal';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const VideoPlayerScreen = ({ route, navigation }) => {
-  const { 
-    movieId, 
-    tvId, 
+  const {
+    movieId,
+    tvId,
     animeId,
-    season = 1, 
-    episode = 1, 
+    season: routeSeason = 1,
+    episode: routeEpisode,
+    episodeNumber,
     contentType = 'movie',
     title = '',
-    isAnime = false,
-    tmdbMapping: routeTmdbMapping = null
+    isAnime: routeIsAnime = false,
+    tmdbMapping: routeTmdbMapping = null,
   } = route.params;
 
+  const season = routeSeason ?? 1;
+  const episode = episodeNumber ?? routeEpisode ?? 1;
+  const isAnimeContent =
+    contentType === 'anime' || routeIsAnime || (!!animeId && contentType !== 'movie' && contentType !== 'tv');
+
   const [selectedSource, setSelectedSource] = useState(
-    getDefaultSource(contentType, isAnime) || (isAnime ? 'vidsrc_anime_sub' : 'videasy')
+    getDefaultSource(contentType, isAnimeContent) || (isAnimeContent ? 'vidsrc_anime_sub' : 'videasy')
   );
   const [currentUrl, setCurrentUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showSources, setShowSources] = useState(false);
-  const [showControls, setShowControls] = useState(false);
+  const [overlayControlsVisible, setOverlayControlsVisible] = useState(true);
   const [showLanguageOverlay, setShowLanguageOverlay] = useState(true);
   
   // TMDB mapping state
@@ -65,18 +77,67 @@ const VideoPlayerScreen = ({ route, navigation }) => {
   const progressSavedRef = useRef(false);
   const metadataRef = useRef(null);
   const [animeDetails, setAnimeDetails] = useState(null);
-  const webViewRef = useRef(null);
-  const controlsTimeoutRef = useRef(null);
   const sourcesScrollViewRef = useRef(null);
-  const id = contentType === 'movie' ? movieId : (isAnime ? animeId : tvId);
-  const sources = isAnime ? ANIME_SOURCES : VIDEO_SOURCES;
+  const autoSelectedSourceRef = useRef(false);
+  const overlayHideTimerRef = useRef(null);
+  const id = contentType === 'movie' ? movieId : isAnimeContent ? animeId : tvId;
+  const sources = isAnimeContent ? ANIME_SOURCES : VIDEO_SOURCES;
+
+  const resolvedSources = useMemo(() => {
+    if (isAnimeContent) {
+      return Object.keys(availableSources).length > 0 ? availableSources : ANIME_SOURCES;
+    }
+
+    return VIDEO_SOURCES;
+  }, [availableSources, isAnimeContent]);
+
+  const prioritizedSources = useMemo(() => {
+    if (isAnimeContent) {
+      return getBaseAvailableSources(contentType, true, resolvedSources);
+    }
+    return getBaseAvailableSources(contentType, false);
+  }, [contentType, isAnimeContent, resolvedSources]);
+
+  const selectedSourceEntry = useMemo(
+    () => prioritizedSources.find(([id]) => id === selectedSource),
+    [prioritizedSources, selectedSource]
+  );
+
+  const selectedSourceDetails = selectedSourceEntry ? selectedSourceEntry[1] : resolvedSources[selectedSource];
+
+  const lockLandscape = useCallback(async () => {
+    try {
+      const currentLock = await ScreenOrientation.getOrientationLockAsync();
+      const landscapeLocks = [
+        ScreenOrientation.OrientationLock.LANDSCAPE,
+        ScreenOrientation.OrientationLock.LANDSCAPE_LEFT,
+        ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
+      ];
+
+      if (!landscapeLocks.includes(currentLock)) {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+      }
+    } catch (orientationError) {
+      console.warn('Failed to maintain landscape lock', orientationError);
+    }
+  }, []);
+
+  const showOverlayControls = useCallback(() => {
+    setOverlayControlsVisible(true);
+    if (overlayHideTimerRef.current) {
+      clearTimeout(overlayHideTimerRef.current);
+    }
+    overlayHideTimerRef.current = setTimeout(() => {
+      setOverlayControlsVisible(false);
+    }, 5000);
+  }, []);
 
   useEffect(() => {
     if (!hasActiveSubscription) return;
 
     const setupScreen = async () => {
       // Lock to landscape
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+      await lockLandscape();
       // Always hide status bar
       StatusBar.setHidden(true, 'none');
       // Set transparent system UI background to prevent dark overlay
@@ -92,7 +153,7 @@ const VideoPlayerScreen = ({ route, navigation }) => {
     console.log('VideoPlayerScreen setup:', {
       id,
       contentType,
-      isAnime,
+      isAnime: isAnimeContent,
       selectedSource,
       routeParams: route.params
     });
@@ -108,11 +169,8 @@ const VideoPlayerScreen = ({ route, navigation }) => {
       StatusBar.setHidden(false, 'slide');
       SystemUI.setBackgroundColorAsync('#000000');
       backHandler.remove();
-      if (controlsTimeoutRef.current) {
-        clearTimeout(controlsTimeoutRef.current);
-      }
     };
-  }, [hasActiveSubscription, selectedSource, id]);
+  }, [hasActiveSubscription, selectedSource, id, lockLandscape]);
 
   if (!hasActiveSubscription) {
     return (
@@ -139,14 +197,52 @@ const VideoPlayerScreen = ({ route, navigation }) => {
   }, [hasActiveSubscription]);
 
   useEffect(() => {
+    autoSelectedSourceRef.current = false;
+    showOverlayControls();
+  }, [id, showOverlayControls]);
+
+  useEffect(() => {
     if (id && selectedSource) {
       loadSource(selectedSource);
     }
-  }, [selectedSource]);
+  }, [id, selectedSource, loadSource]);
+
+  useEffect(() => {
+    if (!isAnimeContent || !id) {
+      return;
+    }
+
+    if (!prioritizedSources.length) {
+      return;
+    }
+
+    const preferredVipEntry = prioritizedSources.find(([, source]) => source.isVipSource);
+    if (!preferredVipEntry) {
+      return;
+    }
+
+    const [preferredVipId] = preferredVipEntry;
+
+    if (selectedSourceDetails?.isVipSource) {
+      autoSelectedSourceRef.current = true;
+      return;
+    }
+
+    if (!autoSelectedSourceRef.current && preferredVipId && preferredVipId !== selectedSource) {
+      autoSelectedSourceRef.current = true;
+      setSelectedSource(preferredVipId);
+    }
+  }, [
+    isAnimeContent,
+    id,
+    prioritizedSources,
+    selectedSource,
+    selectedSourceDetails,
+  ]);
 
   // Fetch TMDB mapping for anime
   useEffect(() => {
-    if (isAnime && id) {
+    if (isAnimeContent && id) {
       if (routeTmdbMapping) {
         // Use TMDB mapping from route params
         setTmdbMapping(routeTmdbMapping);
@@ -159,7 +255,7 @@ const VideoPlayerScreen = ({ route, navigation }) => {
         fetchTMDBMapping();
       }
     }
-  }, [isAnime, id, routeTmdbMapping]);
+  }, [isAnimeContent, id, routeTmdbMapping]);
 
   const fetchAnimeDetailsForSources = async () => {
     try {
@@ -199,7 +295,7 @@ const VideoPlayerScreen = ({ route, navigation }) => {
       setAnimeDetails(anilistAnime);
       
       // Find TMDB mapping
-      const mapping = await tmdbAnimeMapper.findTMDBId(anilistAnime);
+      const mapping = await findBestTmdbMapping(anilistAnime);
       setTmdbMapping(mapping);
       
       // Update available sources (now async)
@@ -459,8 +555,10 @@ const VideoPlayerScreen = ({ route, navigation }) => {
     }
   };
 
-  const loadSource = async (sourceId) => {
+  const loadSource = useCallback(async (sourceId) => {
     try {
+      await lockLandscape();
+
       // Reset states when source changes
       setCurrentUrl('');
       setError(null);
@@ -468,8 +566,9 @@ const VideoPlayerScreen = ({ route, navigation }) => {
       setM3u8Sources([]);
       setShowLanguageOverlay(false);
       setSelectedAudioTrack(null);
+      showOverlayControls();
       
-      const source = availableSources[sourceId] || sources[sourceId];
+      const source = resolvedSources[sourceId] || sources[sourceId];
       console.log(`Loading source ${sourceId}:`, {
         source: source,
         requiresMAL: source?.requiresMAL,
@@ -481,12 +580,40 @@ const VideoPlayerScreen = ({ route, navigation }) => {
       if (!source) return;
 
       if (source.movieOnly && contentType !== 'movie') {
-        setError('This source only supports movies');
+        console.log(`[${sourceId}] Movie-only source encountered for non-movie content, attempting auto-skip`);
+        const currentIndex = prioritizedSources.findIndex(([id]) => id === sourceId);
+        if (currentIndex !== -1 && currentIndex < prioritizedSources.length - 1) {
+          const nextSource = prioritizedSources[currentIndex + 1];
+          const nextSourceName = nextSource?.[1]?.name;
+          const nextSourceId = nextSource?.[0];
+          console.log(
+            `[${sourceId}] Auto-skipping movie-only source to ${nextSourceId} (${nextSourceName})`
+          );
+          setSelectedSource(nextSourceId);
+          return;
+        } else {
+          console.log(`[${sourceId}] No compatible fallback after movie-only restriction`);
+          setError('No compatible sources available for this content.');
+        }
         return;
       }
 
       if (source.tvOnly && contentType !== 'tv') {
-        setError('This source only supports TV series');
+        console.log(`[${sourceId}] TV-only source encountered for non-TV content, attempting auto-skip`);
+        const currentIndex = prioritizedSources.findIndex(([id]) => id === sourceId);
+        if (currentIndex !== -1 && currentIndex < prioritizedSources.length - 1) {
+          const nextSource = prioritizedSources[currentIndex + 1];
+          const nextSourceName = nextSource?.[1]?.name;
+          const nextSourceId = nextSource?.[0];
+          console.log(
+            `[${sourceId}] Auto-skipping TV-only source to ${nextSourceId} (${nextSourceName})`
+          );
+          setSelectedSource(nextSourceId);
+          return;
+        } else {
+          console.log(`[${sourceId}] No compatible fallback after TV-only restriction`);
+          setError('No compatible sources available for this content.');
+        }
         return;
       }
 
@@ -571,22 +698,36 @@ const VideoPlayerScreen = ({ route, navigation }) => {
         }
         
         const response = await fetch(apiUrl);
+        
+        // Check HTTP response status first
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log(`[${sourceId}] HTTP Error ${response.status}: ${errorText}`);
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const data = await response.json();
+        
+        // Check for API-level error responses
+        if (data.error || data.status === 'error' || data.status === 'failed') {
+          console.log(`[${sourceId}] API Error Response:`, data);
+          throw new Error(data.error || data.message || 'API returned error status');
+        }
         
         if (sourceId === 'vip_fmftp' || sourceId === 'tmdb_vip_fmftp') {
           console.log('[VIP FMFTP] Full API response:', data);
           
           // Check if content is available
-          if (data.status === 'down' || data.status === 'inactive') {
-            throw new Error(data.error || 'Content not found or origin server is down');
+          if (data.status === 'down' || data.status === 'inactive' || data.status === 'error') {
+            throw new Error(data.error || data.message || 'Content not found or origin server is down');
           }
           
-          if (!data.embed_url) {
+          if (!data.embed_url && !data.embedUrl) {
             throw new Error('No embed URL found in VIP FMFTP response');
           }
           
           // Use the embed URL for WebView
-          const embedUrl = data.embed_url;
+          const embedUrl = data.embed_url || data.embedUrl;
           console.log('[VIP FMFTP] Using embed URL:', embedUrl);
           
           setCurrentUrl(embedUrl);
@@ -596,20 +737,20 @@ const VideoPlayerScreen = ({ route, navigation }) => {
           console.log('[VIP RoarZone] Full API response:', data);
           
           // Check if content is available
-          if (data.status === 'error') {
-            throw new Error(data.message || 'No playable sources found');
+          if (data.status === 'error' || data.status === 'failed' || data.status === 'inactive') {
+            throw new Error(data.message || data.error || 'No playable sources found');
           }
           
-          if (data.status !== 'active') {
+          if (data.status !== 'active' && data.status !== 'success') {
             throw new Error('Content not available or server is down');
           }
           
-          if (!data.embed_url) {
+          if (!data.embed_url && !data.embedUrl) {
             throw new Error('No embed URL found in VIP RoarZone response');
           }
           
           // Use the embed URL for WebView
-          const embedUrl = data.embed_url;
+          const embedUrl = data.embed_url || data.embedUrl;
           console.log('[VIP RoarZone] Using embed URL:', embedUrl);
           
           setCurrentUrl(embedUrl);
@@ -619,20 +760,20 @@ const VideoPlayerScreen = ({ route, navigation }) => {
           console.log('[VIP CrazyCTG] Full API response:', data);
           
           // Check if content is available
-          if (data.status === 'error') {
-            throw new Error(data.message || 'Media not found or the origin server is down');
+          if (data.status === 'error' || data.status === 'failed' || data.status === 'inactive') {
+            throw new Error(data.message || data.error || 'Media not found or the origin server is down');
           }
           
-          if (data.status !== 'active') {
+          if (data.status !== 'active' && data.status !== 'success') {
             throw new Error('Content not available or server is down');
           }
           
-          if (!data.embed_url) {
+          if (!data.embed_url && !data.embedUrl) {
             throw new Error('No embed URL found in VIP CrazyCTG response');
           }
           
           // Use the embed URL for WebView
-          const embedUrl = data.embed_url;
+          const embedUrl = data.embed_url || data.embedUrl;
           console.log('[VIP CrazyCTG] Using embed URL:', embedUrl);
           
           setCurrentUrl(embedUrl);
@@ -642,20 +783,20 @@ const VideoPlayerScreen = ({ route, navigation }) => {
           console.log('[VIP Binudon] Full API response:', data);
           
           // Check if content is available
-          if (data.status === 'error') {
-            throw new Error(data.message || 'No playable sources found for this content');
+          if (data.status === 'error' || data.status === 'failed' || data.status === 'inactive') {
+            throw new Error(data.message || data.error || 'No playable sources found for this content');
           }
           
-          if (data.status !== 'active') {
+          if (data.status !== 'active' && data.status !== 'success') {
             throw new Error('Content not available or server is down');
           }
           
-          if (!data.embed_url) {
+          if (!data.embed_url && !data.embedUrl) {
             throw new Error('No embed URL found in VIP Binudon response');
           }
           
           // Use the embed URL for WebView
-          const embedUrl = data.embed_url;
+          const embedUrl = data.embed_url || data.embedUrl;
           console.log('[VIP Binudon] Using embed URL:', embedUrl);
           
           setCurrentUrl(embedUrl);
@@ -665,20 +806,20 @@ const VideoPlayerScreen = ({ route, navigation }) => {
           console.log('[VIP SPDX] Full API response:', data);
           
           // Check if content is available
-          if (data.status === 'error') {
-            throw new Error(data.message || 'Media not found or source is unavailable');
+          if (data.status === 'error' || data.status === 'failed' || data.status === 'inactive') {
+            throw new Error(data.message || data.error || 'Media not found or source is unavailable');
           }
           
-          if (data.status !== 'active') {
+          if (data.status !== 'active' && data.status !== 'success') {
             throw new Error('Content not available or server is down');
           }
           
-          if (!data.embed_url) {
+          if (!data.embed_url && !data.embedUrl) {
             throw new Error('No embed URL found in VIP SPDX response');
           }
           
           // Use the embed URL for WebView
-          const embedUrl = data.embed_url;
+          const embedUrl = data.embed_url || data.embedUrl;
           console.log('[VIP SPDX] Using embed URL:', embedUrl);
           
           setCurrentUrl(embedUrl);
@@ -688,12 +829,16 @@ const VideoPlayerScreen = ({ route, navigation }) => {
           console.log('[VIP HydraHD Scrape] Full API response:', data);
           
           // Check if content is available
-          if (!data.embedUrl) {
+          if (data.error || data.status === 'error' || data.status === 'failed') {
+            throw new Error(data.error || data.message || 'Content not found in HydraHD');
+          }
+          
+          if (!data.embedUrl && !data.embed_url) {
             throw new Error('No embed URL found in VIP HydraHD Scrape response');
           }
           
           // Use the embed URL for WebView
-          const embedUrl = data.embedUrl;
+          const embedUrl = data.embedUrl || data.embed_url;
           console.log('[VIP HydraHD Scrape] Using embed URL:', embedUrl);
           
           setCurrentUrl(embedUrl);
@@ -703,14 +848,19 @@ const VideoPlayerScreen = ({ route, navigation }) => {
           console.log('[VIP RidoMovies] Full API response:', data);
           
           // Check if request was successful
-          if (!data.success) {
+          if (!data.success && data.error) {
             if (data.error === 'Invalid movie ID format') {
               throw new Error('Movie ID format is invalid for RidoMovies');
-            } else if (data.error === 'Movie not found') {
+            } else if (data.error === 'Movie not found' || data.error.includes('not found')) {
               throw new Error('Movie not found in RidoMovies database');
             } else {
               throw new Error(data.error || 'RidoMovies API error');
             }
+          }
+          
+          // Check if response indicates error status
+          if (data.status === 'error' || data.status === 'failed') {
+            throw new Error(data.message || data.error || 'RidoMovies API returned error status');
           }
           
           // Check if we have embed codes
@@ -768,11 +918,11 @@ const VideoPlayerScreen = ({ route, navigation }) => {
             setCurrentUrl(data.embedCode[0].embedUrl);
           } else {
             // Move to next source if ridomovies fails
-            const available = getAvailableSources();
-            const currentIdx = available.findIndex(([key]) => key === sourceId);
-            if (currentIdx !== -1 && available.length > currentIdx + 1) {
-              const nextSourceId = available[currentIdx + 1][0];
+            const currentIdx = prioritizedSources.findIndex(([key]) => key === sourceId);
+            if (currentIdx !== -1 && prioritizedSources.length > currentIdx + 1) {
+              const nextSourceId = prioritizedSources[currentIdx + 1][0];
               console.log('No embed URL from ridomovies, moving to next source:', nextSourceId);
+              setSelectedSource(nextSourceId);
               loadSource(nextSourceId);
               return;
             }
@@ -784,49 +934,70 @@ const VideoPlayerScreen = ({ route, navigation }) => {
       }
     } catch (err) {
       console.error('Error loading video source:', err);
+      showOverlayControls();
       
-      // Auto-skip VIP sources if they fail
-      if (sourceId === 'vip_fmftp' || sourceId === 'vip_moviebox' || sourceId === 'vip_roarzone' || sourceId === 'vip_crazyctg' || sourceId === 'vip_binudon' || sourceId === 'vip_spdx' || sourceId === 'vip_hydrahd_scrape' || sourceId === 'vip_ridomovies' ||
-          sourceId === 'tmdb_vip_fmftp' || sourceId === 'tmdb_vip_moviebox' || sourceId === 'tmdb_vip_roarzone' || sourceId === 'tmdb_vip_crazyctg' || sourceId === 'tmdb_vip_binudon' || sourceId === 'tmdb_vip_spdx' || sourceId === 'tmdb_vip_hydrahd_scrape' || sourceId === 'tmdb_vip_ridomovies') {
-        console.log(`[${sourceId}] Source failed, auto-skipping to next source`);
-        const availableSources = getAvailableSources(contentType, isAnime);
-        const currentIndex = availableSources.findIndex(([id]) => id === sourceId);
-        
-        if (currentIndex !== -1 && currentIndex < availableSources.length - 1) {
-          const nextSource = availableSources[currentIndex + 1];
-          console.log(`[${sourceId}] Auto-skipping to next source: ${nextSource[0]}`);
-          setSelectedSource(nextSource[0]);
-          loadSource(nextSource[0]);
-          return;
+      // Enhanced auto-skip logic for anime sources
+      const vipSources = [
+        'vip_fmftp', 'vip_moviebox', 'vip_roarzone', 'vip_crazyctg', 'vip_binudon',
+        'vip_spdx', 'vip_hydrahd_scrape', 'vip_ridomovies',
+        'tmdb_vip_fmftp', 'tmdb_vip_moviebox', 'tmdb_vip_roarzone',
+        'tmdb_vip_crazyctg', 'tmdb_vip_binudon', 'tmdb_vip_spdx',
+        'tmdb_vip_hydrahd_scrape', 'tmdb_vip_ridomovies'
+      ];
+
+      const currentSourceEntry = prioritizedSources.find(([id]) => id === sourceId);
+      const currentSourceDetails = currentSourceEntry ? currentSourceEntry[1] : resolvedSources[sourceId];
+
+      // Check if current source should auto-skip (VIP sources + native anime sources)
+      const shouldAutoSkip =
+        vipSources.includes(sourceId) ||
+        (isAnimeContent && (currentSourceDetails?.isNativeAnimeSource || currentSourceDetails?.isAnimeVipSource));
+
+      if (shouldAutoSkip) {
+        const sourceType = vipSources.includes(sourceId)
+          ? 'VIP'
+          : currentSourceDetails?.isAnimeVipSource
+            ? 'Anime VIP'
+            : currentSourceDetails?.isNativeAnimeSource
+              ? 'Native Anime'
+              : 'Unknown';
+
+        console.log(`[${sourceId}] ${sourceType} source failed, auto-skipping to next source`);
+        const currentIndex = prioritizedSources.findIndex(([id]) => id === sourceId);
+
+        if (currentIndex !== -1 && currentIndex < prioritizedSources.length - 1) {
+            const nextSource = prioritizedSources[currentIndex + 1];
+            const nextSourceDetails = nextSource?.[1];
+            const nextSourceType = vipSources.includes(nextSource[0])
+              ? 'VIP'
+              : nextSourceDetails?.isAnimeVipSource
+                ? 'Anime VIP'
+                : nextSourceDetails?.isNativeAnimeSource
+                  ? 'Native Anime'
+                  : nextSourceDetails?.isPremiumSource
+                    ? 'Premium'
+                    : 'Regular';
+
+            console.log(
+              `[${sourceId}] Auto-skipping from ${sourceType} to ${nextSourceType}: ${nextSource[0]} (${nextSourceDetails?.name})`
+            );
+            setSelectedSource(nextSource[0]);
+            return;
+          } else {
+            console.log(`[${sourceId}] No more sources available for auto-skip`);
+          }
         }
-      }
       
       setError('Failed to load video. Try another source.');
     } finally {
       setLoading(false);
     }
-  };
-
-  // Update getAvailableSources to use enhanced sources
-  const getAvailableSources = () => {
-    const sourcesToUse = Object.keys(availableSources).length > 0 
-      ? availableSources 
-      : (isAnime ? ANIME_SOURCES : VIDEO_SOURCES);
-
-    const filteredSources = Object.entries(sourcesToUse).filter(([key, source]) => {
-      if (contentType === 'movie' && source.tvOnly) return false;
-      if (contentType === 'tv' && source.movieOnly) return false;
-      return true;
-    });
-
-    return filteredSources;
-  };
+  }, [contentType, id, isAnimeContent, lockLandscape, prioritizedSources, resolvedSources, selectedSource, showOverlayControls, tmdbMapping, sources]);
 
   // Scroll to selected source in the sources list
   const scrollToSelectedSource = () => {
     if (sourcesScrollViewRef.current) {
-      const availableSources = getAvailableSources(contentType, isAnime);
-      const selectedIndex = availableSources.findIndex(([sourceId]) => sourceId === selectedSource);
+      const selectedIndex = prioritizedSources.findIndex(([sourceId]) => sourceId === selectedSource);
       
       if (selectedIndex !== -1) {
         // Calculate scroll position (each item is approximately 80px height + 8px margin)
@@ -858,9 +1029,9 @@ const VideoPlayerScreen = ({ route, navigation }) => {
     } else {
       setShowLanguageOverlay(false);
       setLoading(true); // Set loading for regular sources
+      showOverlayControls();
     }
     
-    loadSource(sourceId);
   };
 
   const handleClose = async () => {
@@ -878,6 +1049,32 @@ const VideoPlayerScreen = ({ route, navigation }) => {
   // Get safe area insets
   const insets = useSafeAreaInsets();
 
+  useEffect(() => {
+    return () => {
+      if (overlayHideTimerRef.current) {
+        clearTimeout(overlayHideTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleWebViewMessage = useCallback(
+    async (event, data) => {
+      try {
+        const payload = data || JSON.parse(event?.nativeEvent?.data || '{}');
+    if (payload?.type === 'video-playing') {
+      showOverlayControls();
+    } else if (payload?.type === 'user-interaction') {
+      showOverlayControls();
+    } else if (payload?.type === 'fullscreen-change') {
+      await lockLandscape();
+    }
+      } catch (messageError) {
+        console.warn('Failed to handle WebView message', messageError);
+      }
+    },
+    [lockLandscape, showOverlayControls]
+  );
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
       <View 
@@ -887,7 +1084,7 @@ const VideoPlayerScreen = ({ route, navigation }) => {
       {loading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading {(availableSources[selectedSource] || sources[selectedSource])?.name}...</Text>
+          <Text style={styles.loadingText}>Loading {selectedSourceDetails?.name || sources[selectedSource]?.name}...</Text>
         </View>
       )}
       
@@ -977,12 +1174,56 @@ const VideoPlayerScreen = ({ route, navigation }) => {
           uri={currentUrl}
           sourceId={selectedSource}
           style={styles.webview}
+          onMessage={handleWebViewMessage}
           onError={(errorMessage, suggestedSources) => {
+            console.warn('SmartWebView error for', selectedSource, ':', errorMessage);
+            showOverlayControls();
+            
+            // Enhanced auto-skip for anime sources with different priorities
+            const vipSources = [
+              'vip_fmftp', 'vip_moviebox', 'vip_roarzone', 'vip_crazyctg', 'vip_binudon', 
+              'vip_spdx', 'vip_hydrahd_scrape', 'vip_ridomovies',
+              'tmdb_vip_fmftp', 'tmdb_vip_moviebox', 'tmdb_vip_roarzone', 
+              'tmdb_vip_crazyctg', 'tmdb_vip_binudon', 'tmdb_vip_spdx', 
+              'tmdb_vip_hydrahd_scrape', 'tmdb_vip_ridomovies'
+            ];
+            
+            const currentSourceEntry = prioritizedSources.find(([id]) => id === selectedSource);
+            const currentSource = currentSourceEntry ? currentSourceEntry[1] : resolvedSources[selectedSource];
+            
+            // Check if should auto-skip (VIP, Anime VIP, or Native Anime sources)
+            const shouldAutoSkip =
+              vipSources.includes(selectedSource) ||
+              (isAnimeContent && (currentSource?.isAnimeVipSource || currentSource?.isNativeAnimeSource));
+            
+            if (shouldAutoSkip) {
+              const sourceType = vipSources.includes(selectedSource) ? 'VIP' :
+                                currentSource?.isAnimeVipSource ? 'Anime VIP (TMDB)' :
+                                currentSource?.isNativeAnimeSource ? 'Native Anime (AniList)' : 'Auto-Skip';
+              
+              console.log(`[${selectedSource}] ${sourceType} WebView failed, attempting auto-skip...`);
+              const currentIndex = prioritizedSources.findIndex(([id]) => id === selectedSource);
+              
+              if (currentIndex !== -1 && currentIndex < prioritizedSources.length - 1) {
+                const nextSource = prioritizedSources[currentIndex + 1];
+                const nextSourceType = vipSources.includes(nextSource[0]) ? 'VIP' :
+                                      nextSource[1]?.isAnimeVipSource ? 'Anime VIP (TMDB)' :
+                                      nextSource[1]?.isNativeAnimeSource ? 'Native Anime (AniList)' :
+                                      nextSource[1]?.isPremiumSource ? 'Premium' : 'Regular';
+                
+                console.log(`[${selectedSource}] Auto-skipping from ${sourceType} WebView error to ${nextSourceType}: ${nextSource[0]} (${nextSource[1]?.name})`);
+                setSelectedSource(nextSource[0]);
+                loadSource(nextSource[0]);
+                return;
+              } else {
+                console.log(`[${selectedSource}] No more sources available for WebView auto-skip`);
+              }
+            }
+            
             setError(errorMessage || 'Failed to load video player. Try another source.');
-            console.warn('SmartWebView error: ', errorMessage);
           }}
           onLoadEnd={() => {
-            console.log('SmartWebView load ended successfully');
+            console.log('SmartWebView load ended successfully for', selectedSource);
             setLoading(false);
             // Track playback progress once the player is ready
             trackPlaybackProgress();
@@ -992,7 +1233,13 @@ const VideoPlayerScreen = ({ route, navigation }) => {
 
       {/* Always Visible Back & Sources Buttons */}
       {/* Place back button in top-left, sources button in top-right, leave center-top empty */}
-      <View style={styles.controlsContainer}>
+      <View
+        style={[
+          styles.controlsContainer,
+          !overlayControlsVisible && styles.controlsContainerHidden,
+        ]}
+        pointerEvents={overlayControlsVisible ? 'auto' : 'none'}
+      >
         <TouchableOpacity
           style={[
             styles.backButton, 
@@ -1002,7 +1249,6 @@ const VideoPlayerScreen = ({ route, navigation }) => {
             }
           ]}
           onPress={handleClose}
-          pointerEvents="auto"
         >
           <Ionicons name="arrow-back" size={28} color={Colors.white} />
         </TouchableOpacity>
@@ -1015,21 +1261,21 @@ const VideoPlayerScreen = ({ route, navigation }) => {
             }
           ]}
           onPress={() => {
+            showOverlayControls();
             setShowSources(true);
             // Scroll to selected source after modal opens
             setTimeout(() => {
               scrollToSelectedSource();
             }, 300); // Wait for modal animation to complete
           }}
-          pointerEvents="auto"
         >
           <Ionicons name="layers-outline" size={20} color={Colors.white} />
           <Text style={[
             styles.sourcesButtonText,
-            (availableSources[selectedSource] || getAvailableSources(contentType, isAnime).find(([id]) => id === selectedSource)?.[1])?.isVipSource && styles.vipSourceButtonText,
-            (availableSources[selectedSource] || getAvailableSources(contentType, isAnime).find(([id]) => id === selectedSource)?.[1])?.isPremiumSource && styles.premiumSourceButtonText
+            selectedSourceDetails?.isVipSource && styles.vipSourceButtonText,
+            selectedSourceDetails?.isPremiumSource && styles.premiumSourceButtonText
           ]}>
-            {(availableSources[selectedSource] || getAvailableSources(contentType, isAnime).find(([id]) => id === selectedSource)?.[1])?.name || 'Sources'}
+            {selectedSourceDetails?.name || 'Sources'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -1041,13 +1287,21 @@ const VideoPlayerScreen = ({ route, navigation }) => {
         visible={showSources}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowSources(false)}
+        onRequestClose={() => {
+          setShowSources(false);
+          showOverlayControls();
+        }}
         supportedOrientations={['landscape', 'landscape-left', 'landscape-right']}
       >
         <View style={styles.sourcesModal}>
           <View style={styles.sourcesHeader}>
             <Text style={styles.sourcesTitle}>Select Video Source</Text>
-            <TouchableOpacity onPress={() => setShowSources(false)}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowSources(false);
+                showOverlayControls();
+              }}
+            >
               <Ionicons name="close" size={24} color={Colors.white} />
             </TouchableOpacity>
           </View>
@@ -1058,7 +1312,7 @@ const VideoPlayerScreen = ({ route, navigation }) => {
             showsVerticalScrollIndicator={true}
             contentContainerStyle={styles.sourcesListContent}
           >
-            {getAvailableSources(contentType, isAnime).map(([sourceId, source]) => (
+            {prioritizedSources.map(([sourceId, source]) => (
               <TouchableOpacity
                 key={sourceId}
                 style={[
@@ -1067,7 +1321,9 @@ const VideoPlayerScreen = ({ route, navigation }) => {
                   !source.isWorking && styles.disabledSourceItem,
                   source.isVipSource && styles.vipSourceItem,
                   source.isPremiumSource && styles.premiumSourceItem,
-                  isAnime && !source.isVipSource && !source.isPremiumSource && styles.animeSourceItem
+                  source.isNativeAnimeSource && !source.isVipSource && !source.isPremiumSource && styles.nativeAnimeSourceItem,
+                  source.isAnimeVipSource && styles.animeVipSourceItem,
+                  isAnimeContent && !source.isVipSource && !source.isPremiumSource && !source.isNativeAnimeSource && styles.animeSourceItem
                 ]}
                 onPress={() => source.isWorking ? handleSourceSelect(sourceId) : null}
                 disabled={!source.isWorking}
@@ -1080,7 +1336,9 @@ const VideoPlayerScreen = ({ route, navigation }) => {
                       !source.isWorking && styles.disabledText,
                       source.isVipSource && styles.vipSourceName,
                       source.isPremiumSource && styles.premiumSourceName,
-                      isAnime && !source.isVipSource && !source.isPremiumSource && styles.animeSourceName
+                      source.isNativeAnimeSource && !source.isVipSource && !source.isPremiumSource && styles.nativeAnimeSourceName,
+                      source.isAnimeVipSource && styles.animeVipSourceName,
+                      isAnimeContent && !source.isVipSource && !source.isPremiumSource && !source.isNativeAnimeSource && styles.animeSourceName
                     ]}>
                       {source.name}
                     </Text>
@@ -1091,7 +1349,13 @@ const VideoPlayerScreen = ({ route, navigation }) => {
                       {source.isPremiumSource && (
                         <Text style={styles.premiumBadge}>PREMIUM</Text>
                       )}
-                      {isAnime && !source.isVipSource && !source.isPremiumSource && (
+                      {source.isNativeAnimeSource && !source.isVipSource && !source.isPremiumSource && (
+                        <Text style={styles.nativeAnimeBadge}>NATIVE ANIME</Text>
+                      )}
+                      {source.isAnimeVipSource && (
+                        <Text style={styles.animeVipBadge}>VIP ANIME</Text>
+                      )}
+                      {isAnimeContent && !source.isVipSource && !source.isPremiumSource && !source.isNativeAnimeSource && !source.isAnimeVipSource && (
                         <Text style={styles.animeBadge}>ANIME</Text>
                       )}
                       <Text style={styles.sourceQuality}>{source.quality}</Text>
@@ -1139,8 +1403,10 @@ const styles = StyleSheet.create({
     right: 0,
     height: Platform.OS === 'android' ? 120 : 140,
     zIndex: 1000,
-    pointerEvents: 'box-none',
     paddingTop: Platform.OS === 'android' ? 20 : 30,
+  },
+  controlsContainerHidden: {
+    opacity: 0,
   },
   webview: {
     flex: 1,
@@ -1469,24 +1735,74 @@ const styles = StyleSheet.create({
   },
   // Anime-specific styling
   animeSourceItem: {
-    backgroundColor: '#1a0d2e',
+    backgroundColor: '#0d1929',
     borderWidth: 1,
-    borderColor: '#ff6b9d',
-    shadowColor: '#ff6b9d',
+    borderColor: '#4a90e2',
+    shadowColor: '#4a90e2',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 4,
   },
+  // Native Anime Source Styling (AniList ID support)
+  nativeAnimeSourceItem: {
+    backgroundColor: '#1a0d29',
+    borderWidth: 1,
+    borderColor: '#ff6b6b',
+    shadowColor: '#ff6b6b',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  nativeAnimeSourceName: {
+    color: '#ff9999',
+    fontWeight: 'bold',
+  },
+  nativeAnimeBadge: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: 'bold',
+    backgroundColor: '#ff6b6b',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 5,
+    textTransform: 'uppercase',
+  },
+  // Anime VIP Source Styling (TMDB conversion required)
+  animeVipSourceItem: {
+    backgroundColor: '#2d1a0d',
+    borderWidth: 2,
+    borderColor: '#ff8c00',
+    shadowColor: '#ff8c00',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  animeVipSourceName: {
+    color: '#ffb347',
+    fontWeight: 'bold',
+  },
+  animeVipBadge: {
+    color: '#000',
+    fontSize: 9,
+    fontWeight: 'bold',
+    backgroundColor: '#ff8c00',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    textTransform: 'uppercase',
+  },
   animeSourceName: {
-    color: '#ff6b9d',
+    color: '#87ceeb',
     fontWeight: '600',
   },
   animeBadge: {
     color: '#fff',
     fontSize: 9,
     fontWeight: 'bold',
-    backgroundColor: '#ff6b9d',
+    backgroundColor: '#4a90e2',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,

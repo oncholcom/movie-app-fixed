@@ -211,6 +211,7 @@ const HomeScreen = ({ navigation }) => {
             {isAuthenticated && (
               <ContinueWatchingSection 
                 onItemPress={handleItemPress} 
+                onPlayPress={handlePlayPressWithModal}
                 navigation={navigation} 
                 key={refreshToken} 
               />

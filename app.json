@@ -2,7 +2,7 @@
   "expo": {
     "name": "RObiStream",
     "slug": "movie-app-fixed",
-    "version": "1.0.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "icon": "./assets/icons/playstore.png",
     "userInterfaceStyle": "light",
@@ -16,10 +16,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.robistream.app"
+      "bundleIdentifier": "com.robistream.app",
+      "buildNumber": "2"
     },
     "android": {
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/playstore.png",
         "backgroundColor": "#ffffff"
@@ -34,7 +35,10 @@
               "scheme": "robistream"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },

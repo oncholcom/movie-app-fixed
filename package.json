@@ -1,6 +1,6 @@
 {
   "name": "my-v0-project",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "build": "next build",
@@ -96,6 +96,8 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@react-native-community/cli": "^20.0.2",
+    "@react-native/metro-config": "^0.81.1",
     "@types/node": "^22",
     "@types/react": "~19.1.10",
     "@types/react-dom": "~19.1.7",

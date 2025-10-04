@@ -147,8 +147,11 @@ const AnimeDetailScreen = ({ route, navigation }) => {
     
     navigation.navigate('VideoPlayer', {
       animeId: anime?.id,
+      season: 1,
+      episode: episodeNumber,
       episodeNumber,
       contentType: 'anime',
+      isAnime: true,
       title: `${getAnimeTitle()} - Episode ${episodeNumber}`,
     })
   }

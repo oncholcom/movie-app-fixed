@@ -11,6 +11,7 @@ const SmartWebView = ({
   style = {},
   ...rest 
 }) => {
+  const { onMessage: externalOnMessage, ...webViewProps } = rest;
   const webViewRef = useRef(null);
   const videoPlayingRef = useRef(false);
   const adBlockerRef = useRef(new AdBlocker());
@@ -170,6 +171,127 @@ const SmartWebView = ({
     (function() {
       console.log('SmartWebView script loaded for ${sourceId}');
       
+      // Inject responsive styles for embeds
+      const styleTag = document.createElement('style');
+      styleTag.textContent = \`
+        html, body {
+          margin: 0;
+          padding: 0;
+          height: 100%;
+          width: 100%;
+          background-color: #000;
+          overflow: hidden;
+        }
+
+        body * {
+          box-sizing: border-box;
+        }
+
+        iframe, video {
+          width: 100% !important;
+          height: 100% !important;
+          max-width: 100% !important;
+          max-height: 100% !important;
+        }
+
+        .player, .plyr, .plyr__video-wrapper, .js-player, #player, .embed-responsive,
+        .iframe-container, .videoWrapper, .video-container, .container, body > div:first-of-type {
+          width: 100% !important;
+          height: 100% !important;
+          max-width: 100% !important;
+          max-height: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+      \`;
+      document.head.appendChild(styleTag);
+
+      document.documentElement.style.height = '100%';
+      document.body.style.height = '100%';
+
+      // Enhanced iframe optimization for anime sources
+      function optimizeIframes() {
+        const iframes = document.querySelectorAll('iframe');
+        console.log('Found', iframes.length, 'iframes to optimize');
+        
+        iframes.forEach((iframe, index) => {
+          // Ensure iframe has proper attributes for video playback
+          iframe.setAttribute('allowfullscreen', 'true');
+          iframe.setAttribute('webkitallowfullscreen', 'true');
+          iframe.setAttribute('mozallowfullscreen', 'true');
+          iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media; accelerometer; gyroscope');
+          iframe.setAttribute('frameborder', '0');
+          iframe.setAttribute('scrolling', 'no');
+          
+          // Set proper iframe styling
+          iframe.style.width = '100%';
+          iframe.style.height = '100%';
+          iframe.style.border = 'none';
+          iframe.style.display = 'block';
+          iframe.style.visibility = 'visible';
+          iframe.style.opacity = '1';
+          iframe.style.position = 'relative';
+          iframe.style.zIndex = '1';
+          
+          console.log('Optimized iframe', index + 1, ':', iframe.src);
+        });
+        
+        // Remove blocking overlays while preserving player controls
+        const overlaySelectors = [
+          'div[style*="position: fixed"][style*="z-index"]',
+          'div[style*="position: absolute"][style*="z-index"]',
+          '.ad-overlay', '.popup-overlay', '.redirect-overlay',
+          'div[onclick*="window.open"]', 'div[onclick*="location"]'
+        ];
+        
+        overlaySelectors.forEach(selector => {
+          const overlays = document.querySelectorAll(selector);
+          overlays.forEach(overlay => {
+            // Check if it's blocking the iframe
+            const rect = overlay.getBoundingClientRect();
+            if (rect.width > 200 && rect.height > 200) {
+              const computedStyle = window.getComputedStyle(overlay);
+              const zIndex = parseInt(computedStyle.zIndex) || 0;
+              
+              // Remove overlays with high z-index that might block video
+              if (zIndex > 9999) {
+                console.log('Removing blocking overlay:', overlay);
+                overlay.remove();
+              }
+            }
+          });
+        });
+      }
+      
+      // Run iframe optimization immediately and on DOM changes
+      optimizeIframes();
+      
+      // Monitor DOM changes for dynamically loaded iframes
+      const observer = new MutationObserver(function(mutations) {
+        let iframeAdded = false;
+        mutations.forEach(function(mutation) {
+          if (mutation.type === 'childList') {
+            mutation.addedNodes.forEach(function(node) {
+              if (node.nodeType === 1) {
+                if (node.tagName === 'IFRAME' || node.querySelectorAll('iframe').length > 0) {
+                  iframeAdded = true;
+                }
+              }
+            });
+          }
+        });
+        
+        if (iframeAdded) {
+          console.log('New iframe detected, re-optimizing...');
+          setTimeout(optimizeIframes, 100);
+        }
+      });
+      
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      
       // Video detection functionality
       function checkVideoPlaying() {
         const videos = document.querySelectorAll('video');
@@ -202,8 +324,41 @@ const SmartWebView = ({
           checkVideoPlaying();
         }
       }, true);
+
+      ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(eventName => {
+        document.addEventListener(eventName, () => {
+          const isFullScreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'fullscreen-change',
+              sourceId: '${sourceId}',
+              isFullScreen
+            }));
+          }
+        });
+      });
+
+      ['touchstart', 'mousedown', 'mousemove'].forEach(eventName => {
+        document.addEventListener(eventName, () => {
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'user-interaction',
+              sourceId: '${sourceId}'
+            }));
+          }
+        }, true);
+      });
+
+      // Re-optimize iframes after page load
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          setTimeout(optimizeIframes, 500);
+        });
+      } else {
+        setTimeout(optimizeIframes, 500);
+      }
       
-      console.log('Video detection script loaded for ${sourceId}');
+      console.log('Enhanced iframe optimization and video detection loaded for ${sourceId}');
     })();
     
     // Network blocking for non-VIP sources
@@ -298,8 +453,15 @@ const SmartWebView = ({
         console.log(`[WebView] Video is playing for ${sourceId}`);
         videoPlayingRef.current = true;
       }
+
+      if (typeof externalOnMessage === 'function') {
+        externalOnMessage(event, data);
+      }
     } catch (error) {
       console.log(`[WebView] Error parsing message from ${sourceId}:`, error);
+      if (typeof externalOnMessage === 'function') {
+        externalOnMessage(event, null);
+      }
     }
   };
 
@@ -352,7 +514,7 @@ const SmartWebView = ({
       }}
       onLoadProgress={({ nativeEvent }) => console.log(`WebView load progress: ${nativeEvent.progress * 100}%`)}
       
-      {...rest}
+      {...webViewProps}
     />
   );
 };
